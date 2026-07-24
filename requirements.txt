@@ -1,0 +1,43 @@
+# API
+fastapi
+uvicorn[standard]
+pydantic
+python-multipart
+
+# Configuration
+python-dotenv
+
+# Data
+pandas
+numpy
+
+# Machine Learning
+scikit-learn
+sentence-transformers
+joblib
+
+# RAG
+chromadb
+langchain
+langchain-community
+langchain-text-splitters
+pypdf
+
+# Base de données
+sqlalchemy
+
+# Interface
+streamlit
+requests
+
+# Visualisation
+matplotlib
+seaborn
+
+# Notebooks
+jupyter
+ipykernel
+
+# Tests
+pytest
+httpx

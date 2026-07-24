@@ -1,0 +1,10 @@
+﻿metric,value
+count,3000.0
+mean_characters,78.99333333333334
+median_characters,76.0
+min_characters,33.0
+max_characters,161.0
+mean_words,12.711333333333334
+median_words,12.0
+min_words,5.0
+max_words,26.0

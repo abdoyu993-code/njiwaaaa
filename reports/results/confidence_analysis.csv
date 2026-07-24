@@ -1,0 +1,10 @@
+﻿indicator,value
+mean_confidence_all,0.834449052810669
+mean_confidence_correct,0.8396360874176025
+mean_confidence_errors,0.508553147315979
+low_confidence_count,259.0
+low_confidence_rate,0.08633333333333333
+high_confidence_count,2741.0
+high_confidence_accuracy,0.9956220357533747
+low_confidence_accuracy,0.8648648648648649
+mean_confidence_margin,0.7704547643661499

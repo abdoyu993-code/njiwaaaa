@@ -1,0 +1,15 @@
+{
+  "accuracy": 0.9843333333333333,
+  "macro_precision": 0.9846550340839836,
+  "macro_recall": 0.9843333333333333,
+  "macro_f1": 0.9842172547973682,
+  "weighted_f1": 0.9842172547973682,
+  "test_examples": 3000,
+  "correct_predictions": 2953,
+  "incorrect_predictions": 47,
+  "domain_errors": 4,
+  "confidence_threshold": 0.6,
+  "low_confidence_predictions": 259,
+  "mean_confidence": 0.834449052810669,
+  "number_of_confusion_pairs": 20
+}

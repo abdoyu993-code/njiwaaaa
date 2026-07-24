@@ -1,0 +1,12 @@
+﻿indicator,value
+train_rows,12000
+test_rows,3000
+train_intents,60
+test_intents,60
+train_domains,7
+test_domains,7
+intents_only_train,0
+intents_only_test,0
+domains_only_train,0
+domains_only_test,0
+overlapping_texts,0
