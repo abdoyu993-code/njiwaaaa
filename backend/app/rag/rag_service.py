@@ -10,7 +10,7 @@ from backend.app.rag.retriever import NarsaRetriever
 
 DEFAULT_CLARIFICATION_THRESHOLD = 0.60
 DEFAULT_MINIMUM_SIMILARITY_SCORE = 0.30
-DEFAULT_TOP_K = 5
+DEFAULT_TOP_K = 3
 
 
 INTENT_QUERY_HINTS: dict[str, str] = {
@@ -169,6 +169,7 @@ class NarsaRAGService:
             domain=domain,
             intent=intent,
             top_k=top_k,
+            original_query=question,
         )
 
         relevant_chunks = self._filter_chunks(

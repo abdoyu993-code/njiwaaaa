@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import random
 import time
 from typing import Any
 
@@ -19,12 +18,12 @@ load_dotenv()
 
 
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash"
-DEFAULT_MAX_CONTEXTS = 4
-DEFAULT_TOP_K = 5
+DEFAULT_MAX_CONTEXTS = 3
+DEFAULT_TOP_K = 3
 
-DEFAULT_MAX_RETRIES = 3
-DEFAULT_RETRY_BASE_DELAY = 2.0
-DEFAULT_RETRY_MAX_DELAY = 12.0
+DEFAULT_MAX_RETRIES = 1
+DEFAULT_RETRY_BASE_DELAY = 1.0
+DEFAULT_RETRY_MAX_DELAY = 1.0
 
 RETRYABLE_STATUS_CODES = {
     429,
@@ -72,14 +71,20 @@ class NarsaGenerationService:
             )
         )
 
-        self.max_contexts = max(
-            1,
-            max_contexts,
+        self.max_contexts = min(
+            DEFAULT_MAX_CONTEXTS,
+            max(
+                1,
+                max_contexts,
+            ),
         )
 
-        self.max_retries = max(
-            0,
-            max_retries,
+        self.max_retries = min(
+            DEFAULT_MAX_RETRIES,
+            max(
+                0,
+                max_retries,
+            ),
         )
 
         self.retry_base_delay = max(
@@ -179,11 +184,8 @@ class NarsaGenerationService:
         except Exception as error:
             return {
                 **rag_result,
-                "answer": (
-                    "Le service de génération est "
-                    "temporairement indisponible. "
-                    "Les documents pertinents ont bien été trouvés. "
-                    "Veuillez réessayer dans quelques instants."
+                "answer": self._build_extractive_fallback(
+                    contexts=contexts
                 ),
                 "generated": False,
                 "model": self.model_name,
@@ -239,16 +241,8 @@ class NarsaGenerationService:
         prompt: str,
     ) -> tuple[Any, int]:
         """
-        Appelle Gemini avec retry exponentiel.
-
-        Exemple avec 3 retries :
-        tentative 1 ;
-        attente environ 2 secondes ;
-        tentative 2 ;
-        attente environ 4 secondes ;
-        tentative 3 ;
-        attente environ 8 secondes ;
-        tentative 4 finale.
+        Appelle Gemini une première fois, puis effectue au plus
+        une nouvelle tentative après une courte attente.
         """
         total_attempts = (
             self.max_retries + 1
@@ -272,7 +266,7 @@ class NarsaGenerationService:
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             temperature=1.0,
-                            max_output_tokens=2048,
+                            max_output_tokens=1200,
                             thinking_config=(
                                 types.ThinkingConfig(
                                     thinking_level="low",
@@ -339,11 +333,7 @@ class NarsaGenerationService:
         attempt: int,
     ) -> float:
         """
-        Calcule l'attente exponentielle avec un léger jitter.
-
-        1re erreur : environ 2 secondes
-        2e erreur : environ 4 secondes
-        3e erreur : environ 8 secondes
+        Calcule une attente courte avant l'unique retry.
         """
         exponential_delay = (
             self.retry_base_delay
@@ -355,12 +345,7 @@ class NarsaGenerationService:
             self.retry_max_delay,
         )
 
-        jitter = random.uniform(
-            0.0,
-            0.5,
-        )
-
-        return limited_delay + jitter
+        return limited_delay
 
     @staticmethod
     def _get_status_code(
@@ -524,6 +509,49 @@ class NarsaGenerationService:
 
         return "\n\n".join(
             formatted_contexts
+        )
+
+    @staticmethod
+    def _build_extractive_fallback(
+        contexts: list[dict[str, Any]],
+    ) -> str:
+        """
+        Retourne uniquement les extraits récupérés, sans génération.
+        """
+        extracted_sections: list[str] = []
+
+        for context in contexts:
+            content = (
+                context.get("content")
+                or ""
+            ).strip()
+
+            if not content:
+                continue
+
+            title = (
+                context.get("title")
+                or context.get("filename")
+                or "Document NARSA"
+            )
+
+            extracted_sections.append(
+                f"### {title}\n\n{content}"
+            )
+
+        if not extracted_sections:
+            return (
+                "Le service de génération est temporairement "
+                "indisponible et aucun extrait documentaire "
+                "exploitable n’est disponible."
+            )
+
+        return (
+            "Le service de génération est temporairement "
+            "indisponible. Voici uniquement les extraits "
+            "documentaires récupérés, sans ajout d’information :"
+            "\n\n"
+            + "\n\n".join(extracted_sections)
         )
 
     @staticmethod

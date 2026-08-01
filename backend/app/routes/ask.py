@@ -122,6 +122,39 @@ FORM_ANSWERS: dict[str, str] = {
     ),
 }
 
+SIMPLE_MESSAGE_RESPONSES: dict[str, tuple[str, str]] = {
+    "bonjour": (
+        "salutation",
+        "Bonjour 👋 Comment puis-je vous aider concernant les services de la NARSA ?",
+    ),
+    "bonsoir": (
+        "salutation",
+        "Bonsoir 👋 Comment puis-je vous aider concernant les services de la NARSA ?",
+    ),
+    "salut": (
+        "salutation",
+        "Salut 👋 Comment puis-je vous aider concernant les services de la NARSA ?",
+    ),
+    "salam": (
+        "salutation",
+        "Salam 👋 Comment puis-je vous aider concernant les services de la NARSA ?",
+    ),
+    "merci": (
+        "remerciement",
+        "Avec plaisir. N’hésitez pas si vous avez une autre question sur les services de la NARSA.",
+    ),
+    "au revoir": (
+        "au_revoir",
+        "Au revoir 👋",
+    ),
+}
+
+FORM_DOMAINS: dict[str, str] = {
+    "contestation_amende": "infractions",
+    "mutation_vehicule": "vehicules",
+    "immatriculation_vehicule": "vehicules",
+}
+
 
 def normalize_text(
     text: str,
@@ -131,10 +164,32 @@ def normalize_text(
         text.lower(),
     )
 
-    return "".join(
+    without_accents = "".join(
         character
         for character in normalized
         if unicodedata.category(character) != "Mn"
+    )
+
+    without_punctuation = "".join(
+        character
+        if (
+            character.isalnum()
+            or character.isspace()
+        )
+        else " "
+        for character in without_accents
+    )
+
+    return " ".join(
+        without_punctuation.split()
+    )
+
+
+def detect_simple_message(
+    question: str,
+) -> tuple[str, str] | None:
+    return SIMPLE_MESSAGE_RESPONSES.get(
+        normalize_text(question)
     )
 
 
@@ -201,11 +256,71 @@ def ask_question(
     request: AskRequest,
 ) -> AskResponse:
     try:
+        simple_message = detect_simple_message(
+            request.question
+        )
+
+        if simple_message:
+            intent, answer = simple_message
+
+            return AskResponse(
+                question=request.question,
+                answer=answer,
+                status="local_response",
+                domain="conversation",
+                intent=intent,
+                confidence=1.0,
+                needs_clarification=False,
+                generated=False,
+                model=None,
+                finish_reason=None,
+                sources=[],
+                forms=[],
+                metadata={
+                    "handled_locally": True,
+                    "generation_attempts": 0,
+                    "used_contexts_count": 0,
+                },
+            )
+
         explicit_form_intent = (
             detect_explicit_form_intent(
                 request.question
             )
         )
+
+        if explicit_form_intent:
+            return AskResponse(
+                question=request.question,
+                answer=FORM_ANSWERS[
+                    explicit_form_intent
+                ],
+                status="form_found",
+                domain=FORM_DOMAINS[
+                    explicit_form_intent
+                ],
+                intent=explicit_form_intent,
+                confidence=1.0,
+                needs_clarification=False,
+                generated=False,
+                model=None,
+                finish_reason=None,
+                sources=[],
+                forms=FORM_MAPPING[
+                    explicit_form_intent
+                ],
+                metadata={
+                    "handled_locally": True,
+                    "explicit_form_intent": (
+                        explicit_form_intent
+                    ),
+                    "original_classifier_intent": None,
+                    "classification": {},
+                    "retrieval_query": None,
+                    "generation_attempts": 0,
+                    "used_contexts_count": 0,
+                },
+            )
 
         result = generate_answer(
             question=request.question,
@@ -231,25 +346,9 @@ def ask_question(
         ]
         generated = result["generated"]
 
-        # Une demande explicite de formulaire est considérée
-        # comme comprise même si le classificateur général
-        # avait une confiance inférieure au seuil.
-        if explicit_form_intent:
-            answer = FORM_ANSWERS.get(
-                explicit_form_intent,
-                (
-                    "Voici les formulaires correspondant "
-                    "à votre demande."
-                ),
-            )
-
-            status = "form_found"
-            needs_clarification = False
-            generated = False
-
-        # Sans détection explicite, ne pas afficher de PDF
-        # lorsque la classification reste incertaine.
-        elif needs_clarification:
+        # Ne pas afficher de PDF lorsque la classification
+        # reste incertaine.
+        if needs_clarification:
             available_forms = []
 
         response_data = {
@@ -258,8 +357,7 @@ def ask_question(
             "status": status,
             "domain": result["domain"],
             "intent": (
-                explicit_form_intent
-                or classifier_intent
+                classifier_intent
             ),
             "confidence": result["confidence"],
             "needs_clarification": (
@@ -278,8 +376,6 @@ def ask_question(
             ),
             "sources": (
                 result.get("sources", [])
-                if explicit_form_intent is None
-                else []
             ),
             "forms": available_forms,
             "metadata": {
@@ -295,7 +391,7 @@ def ask_question(
                     0,
                 ),
                 "explicit_form_intent": (
-                    explicit_form_intent
+                    None
                 ),
                 "original_classifier_intent": (
                     classifier_intent

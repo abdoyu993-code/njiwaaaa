@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import unicodedata
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +19,55 @@ EMBEDDING_MODEL_NAME = (
     "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 )
 
-DEFAULT_TOP_K = 5
+DEFAULT_TOP_K = 3
 DEFAULT_INTENT_BOOST = 0.18
+DEFAULT_CONTEXT_FACET_BOOST = 0.12
+
+MUTATION_CONTEXT_INTENTS = {
+    "mutation_vehicule",
+    "changement_proprietaire",
+    "vehicule_vendu",
+}
+
+MUTATION_QUERY_MARKERS = (
+    "mutation",
+    "vente",
+    "vendu",
+    "vendre",
+    "cession",
+    "changement proprietaire",
+    "changer proprietaire",
+    "nouveau proprietaire",
+    "vendeur",
+    "acheteur",
+)
+
+VISIT_TECHNICAL_QUERY_MARKERS = (
+    "visite technique",
+    "controle technique",
+)
+
+DOCUMENT_QUERY_MARKERS = (
+    "document",
+    "documents",
+    "piece",
+    "pieces",
+    "proces verbal",
+    "pv",
+)
+
+INTENT_DOMAINS = {
+    "mutation_vehicule": "vehicule",
+    "visite_technique_documents": "visite_technique",
+}
+
+
+@dataclass(frozen=True)
+class QueryProfile:
+    intents: frozenset[str]
+    domains: frozenset[str]
+    has_mutation_context: bool
+    asks_visit_documents: bool
 
 
 class NarsaRetriever:
@@ -119,12 +168,133 @@ class NarsaRetriever:
             if intent.strip()
         ]
 
+    @staticmethod
+    def normalize_for_matching(
+        text: str,
+    ) -> str:
+        normalized = unicodedata.normalize(
+            "NFD",
+            text.lower(),
+        )
+
+        without_accents = "".join(
+            character
+            for character in normalized
+            if unicodedata.category(character) != "Mn"
+        )
+
+        return " ".join(
+            without_accents.split()
+        )
+
+    @classmethod
+    def build_query_profile(
+        cls,
+        query: str,
+        domain: str | None,
+        intent: str | None,
+    ) -> QueryProfile:
+        normalized_query = cls.normalize_for_matching(
+            query
+        )
+
+        has_mutation_context = any(
+            marker in normalized_query
+            for marker in MUTATION_QUERY_MARKERS
+        )
+
+        mentions_visit_technical = any(
+            marker in normalized_query
+            for marker in VISIT_TECHNICAL_QUERY_MARKERS
+        )
+
+        mentions_documents = any(
+            marker in normalized_query
+            for marker in DOCUMENT_QUERY_MARKERS
+        )
+
+        asks_visit_documents = (
+            mentions_visit_technical
+            and mentions_documents
+        )
+
+        query_intents = {
+            value
+            for value in [intent]
+            if value
+        }
+
+        query_domains = {
+            value
+            for value in [domain]
+            if value
+        }
+
+        if asks_visit_documents:
+            query_intents.add(
+                "visite_technique_documents"
+            )
+            query_domains.add(
+                INTENT_DOMAINS[
+                    "visite_technique_documents"
+                ]
+            )
+
+        if has_mutation_context:
+            query_intents.add(
+                "mutation_vehicule"
+            )
+            query_domains.add(
+                INTENT_DOMAINS[
+                    "mutation_vehicule"
+                ]
+            )
+
+        return QueryProfile(
+            intents=frozenset(query_intents),
+            domains=frozenset(query_domains),
+            has_mutation_context=has_mutation_context,
+            asks_visit_documents=asks_visit_documents,
+        )
+
+    @staticmethod
+    def is_candidate_compatible(
+        profile: QueryProfile,
+        chunk_intents: list[str],
+    ) -> bool:
+        """
+        Vérifie que le chunk couvre le contexte réel de la question.
+        """
+        if not profile.asks_visit_documents:
+            return True
+
+        chunk_intent_set = set(chunk_intents)
+
+        has_mutation_metadata = bool(
+            MUTATION_CONTEXT_INTENTS
+            .intersection(chunk_intent_set)
+        )
+
+        if not profile.has_mutation_context:
+            return (
+                "visite_technique_documents"
+                in chunk_intent_set
+                and not has_mutation_metadata
+            )
+
+        return bool(
+            profile.intents.intersection(
+                chunk_intent_set
+            )
+        )
+
     def search(
         self,
         query: str,
         domain: str | None = None,
         intent: str | None = None,
         top_k: int = DEFAULT_TOP_K,
+        original_query: str | None = None,
     ) -> list[dict[str, Any]]:
         """
         Recherche les chunks puis les reclasse selon :
@@ -139,6 +309,16 @@ class NarsaRetriever:
 
         top_k = max(1, top_k)
 
+        profile = self.build_query_profile(
+            query=(
+                original_query
+                if original_query is not None
+                else query
+            ),
+            domain=domain,
+            intent=intent,
+        )
+
         enhanced_query = self.enhance_query(
             query=query,
             domain=domain,
@@ -152,9 +332,18 @@ class NarsaRetriever:
 
         where_filter = None
 
-        if domain:
+        if len(profile.domains) == 1:
             where_filter = {
-                "domain": domain
+                "domain": next(
+                    iter(profile.domains)
+                )
+            }
+
+        elif len(profile.domains) > 1:
+            where_filter = {
+                "domain": {
+                    "$in": sorted(profile.domains)
+                }
             }
 
         # On récupère plus de candidats que nécessaire,
@@ -218,6 +407,25 @@ class NarsaRetriever:
                 metadata
             )
 
+            if not self.is_candidate_compatible(
+                profile=profile,
+                chunk_intents=chunk_intents,
+            ):
+                continue
+
+            matched_query_intents = sorted(
+                profile.intents.intersection(
+                    chunk_intents
+                )
+            )
+
+            context_coverage = (
+                len(matched_query_intents)
+                / len(profile.intents)
+                if profile.intents
+                else 0.0
+            )
+
             intent_match = bool(
                 intent
                 and intent in chunk_intents
@@ -227,6 +435,16 @@ class NarsaRetriever:
 
             if intent_match:
                 final_score += self.intent_boost
+
+            context_facet_boost = (
+                DEFAULT_CONTEXT_FACET_BOOST
+                * max(
+                    0,
+                    len(matched_query_intents) - 1,
+                )
+            )
+
+            final_score += context_facet_boost
 
             final_score = max(
                 0.0,
@@ -256,6 +474,19 @@ class NarsaRetriever:
                     ),
                     "intents": chunk_intents,
                     "intent_match": intent_match,
+                    "query_intents": sorted(
+                        profile.intents
+                    ),
+                    "query_domains": sorted(
+                        profile.domains
+                    ),
+                    "matched_query_intents": (
+                        matched_query_intents
+                    ),
+                    "context_coverage": round(
+                        context_coverage,
+                        4,
+                    ),
                     "distance": round(
                         distance_value,
                         4,
@@ -269,6 +500,10 @@ class NarsaRetriever:
                         if intent_match
                         else 0.0
                     ),
+                    "context_facet_boost": round(
+                        context_facet_boost,
+                        4,
+                    ),
                     "similarity_score": round(
                         final_score,
                         4,
@@ -278,6 +513,7 @@ class NarsaRetriever:
 
         candidates.sort(
             key=lambda item: (
+                item["context_coverage"],
                 item["intent_match"],
                 item["similarity_score"],
                 item["semantic_score"],

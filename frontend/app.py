@@ -36,7 +36,7 @@ def initialize_session_state() -> None:
 
 def call_api(
     question: str,
-    top_k: int = 4,
+    top_k: int = 3,
 ) -> dict[str, Any]:
     response = requests.post(
         ASK_API_URL,
@@ -265,7 +265,7 @@ with st.sidebar:
         "Nombre de chunks recherchés",
         min_value=1,
         max_value=10,
-        value=4,
+        value=3,
     )
 
     show_technical_details = st.checkbox(

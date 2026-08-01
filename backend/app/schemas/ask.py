@@ -13,7 +13,7 @@ class AskRequest(BaseModel):
     )
 
     top_k: int = Field(
-        default=5,
+        default=3,
         ge=1,
         le=10,
         description="Nombre maximal de chunks recherchés",
