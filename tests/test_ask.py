@@ -59,6 +59,10 @@ def test_simple_messages_are_handled_locally(
     assert payload["needs_clarification"] is False
     assert payload["metadata"]["handled_locally"] is True
     assert payload["metadata"]["generation_attempts"] == 0
+    assert payload["metadata"]["classification_time_ms"] == 0.0
+    assert payload["metadata"]["retrieval_time_ms"] == 0.0
+    assert payload["metadata"]["generation_time_ms"] == 0.0
+    assert payload["metadata"]["total_time_ms"] >= 0.0
 
 
 def test_normal_narsa_question_uses_default_top_k_three(
@@ -84,11 +88,22 @@ def test_normal_narsa_question_uses_default_top_k_three(
             "generated": True,
             "model": "gemini-test",
             "finish_reason": "STOP",
-            "sources": [],
+            "sources": [{
+                "title": "Permis perdu",
+                "filename": "permis_perte.md",
+                "relative_path": "permis/permis_perte.md",
+                "domain": "permis",
+                "best_similarity_score": 0.91,
+            }],
             "retrieval_query": question,
             "used_contexts_count": 3,
             "generation_attempts": 1,
             "classification": {},
+            "classification_time_ms": 11.0,
+            "retrieval_time_ms": 22.0,
+            "generation_time_ms": 33.0,
+            "total_time_ms": 66.0,
+            "extractive": False,
         }
 
     monkeypatch.setattr(
@@ -115,6 +130,12 @@ def test_normal_narsa_question_uses_default_top_k_three(
     assert response.json()["answer"] == (
         "Réponse documentaire NARSA."
     )
+    assert response.json()["sources"][0]["filename"] == (
+        "permis_perte.md"
+    )
+    assert response.json()["metadata"]["classification_time_ms"] == 11.0
+    assert response.json()["metadata"]["retrieval_time_ms"] == 22.0
+    assert response.json()["metadata"]["generation_time_ms"] == 33.0
 
 
 @pytest.mark.parametrize(
@@ -176,6 +197,40 @@ def test_explicit_form_requests_are_handled_locally(
         for form in payload["forms"]
     ] == expected_filenames
     assert payload["metadata"]["handled_locally"] is True
+    assert payload["service_links"] == []
+    assert payload["domain"] in {"infractions", "vehicule"}
+    assert "duplicata-de-mon-permis-de-conduire" not in (
+        payload["answer"]
+    )
+
+
+def test_generic_carte_grise_form_requests_clarification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ask_route,
+        "generate_answer",
+        fail_if_pipeline_is_called,
+    )
+
+    response = client.post(
+        "/ask",
+        json={
+            "question": "donne-moi le formulaire pour la carte grise",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+
+    assert payload["status"] == "clarification_required"
+    assert payload["domain"] == "vehicule"
+    assert payload["intent"] == "carte_grise_demande"
+    assert payload["needs_clarification"] is True
+    assert payload["forms"] == []
+    assert payload["service_links"] == []
+    assert "immatriculation" in payload["answer"]
+    assert "mutation" in payload["answer"]
 
 
 def test_ambiguous_question_requests_clarification(

@@ -5,6 +5,21 @@ from typing import Any
 import requests
 import streamlit as st
 
+if __package__:
+    from .rendering import (
+        local_forms_for_display,
+        previous_context_from_messages,
+        service_links_for_display,
+        sources_for_display,
+    )
+else:
+    from rendering import (
+        local_forms_for_display,
+        previous_context_from_messages,
+        service_links_for_display,
+        sources_for_display,
+    )
+
 
 API_BASE_URL = "http://127.0.0.1:8000"
 ASK_API_URL = f"{API_BASE_URL}/ask"
@@ -37,43 +52,24 @@ def initialize_session_state() -> None:
 def call_api(
     question: str,
     top_k: int = 3,
+    context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "question": question,
+        "top_k": top_k,
+    }
+
+    if context:
+        payload["context"] = context
+
     response = requests.post(
         ASK_API_URL,
-        json={
-            "question": question,
-            "top_k": top_k,
-        },
+        json=payload,
         timeout=120,
     )
 
     response.raise_for_status()
     return response.json()
-
-
-def display_sources(
-    sources: list[dict[str, Any]],
-) -> None:
-    if not sources:
-        return
-
-    displayed_titles: set[str] = set()
-
-    with st.expander(
-        "Documents de référence",
-        expanded=False,
-    ):
-        for source in sources:
-            title = (
-                source.get("title")
-                or "Document NARSA"
-            )
-
-            if title in displayed_titles:
-                continue
-
-            displayed_titles.add(title)
-            st.markdown(f"- {title}")
 
 
 def display_forms(
@@ -83,12 +79,14 @@ def display_forms(
     Affiche des boutons directs vers les PDF servis par FastAPI.
     Streamlit ne télécharge plus le fichier en mémoire.
     """
-    if not forms:
+    local_forms = local_forms_for_display(forms)
+
+    if not local_forms:
         return
 
     st.markdown("### Formulaires disponibles")
 
-    for form in forms:
+    for form in local_forms:
         title = form.get(
             "title",
             "Formulaire NARSA",
@@ -101,10 +99,20 @@ def display_forms(
         if not download_url:
             continue
 
-        full_url = f"{API_BASE_URL}{download_url}"
+        full_url = (
+            download_url
+            if download_url.startswith(
+                ("http://", "https://")
+            )
+            else f"{API_BASE_URL}{download_url}"
+        )
+
+        button_label = form.get(
+            "button_label"
+        ) or f"📄 Télécharger : {title}"
 
         st.link_button(
-            label=f"📄 Télécharger : {title}",
+            label=button_label,
             url=full_url,
             use_container_width=True,
         )
@@ -149,7 +157,7 @@ def display_metadata(
     )
 
     with st.expander(
-        "Détails techniques",
+        "Sources et détails techniques",
         expanded=False,
     ):
         col1, col2 = st.columns(2)
@@ -193,11 +201,10 @@ def display_metadata(
                 f"**Fin Gemini :** `{finish_reason}`"
             )
 
-        sources = response_data.get(
-            "sources",
-            [],
+        sources = sources_for_display(
+            response_data=response_data,
+            technical_details_enabled=True,
         )
-
         if sources:
             st.markdown(
                 "**Sources techniques :**"
@@ -232,6 +239,39 @@ def display_metadata(
                         "Score de similarité : "
                         f"{score:.4f}"
                     )
+
+        timing_labels = (
+            ("Classification", "classification_time_ms"),
+            ("Recherche", "retrieval_time_ms"),
+            ("Génération", "generation_time_ms"),
+            ("Total", "total_time_ms"),
+        )
+
+        st.markdown("**Temps de traitement :**")
+
+        for label, key in timing_labels:
+            duration = metadata.get(key, 0.0)
+            st.caption(
+                f"{label} : {duration:.2f} ms"
+            )
+
+
+def display_service_links(
+    response_data: dict[str, Any],
+) -> None:
+    service_links = service_links_for_display(response_data)
+
+    if not service_links:
+        return
+
+    st.markdown("### Services officiels")
+
+    for service_link in service_links:
+        st.link_button(
+            label=service_link["label"],
+            url=service_link["url"],
+            use_container_width=True,
+        )
 
 
 def append_assistant_message(
@@ -317,19 +357,13 @@ for message in st.session_state.messages:
             message["role"] == "assistant"
             and metadata
         ):
-            display_sources(
-                metadata.get(
-                    "sources",
-                    [],
-                )
-            )
-
             display_forms(
                 metadata.get(
                     "forms",
                     [],
                 )
             )
+            display_service_links(metadata)
 
             if show_technical_details:
                 display_metadata(
@@ -343,6 +377,10 @@ question = st.chat_input(
 
 
 if question:
+    previous_context = previous_context_from_messages(
+        st.session_state.messages
+    )
+
     st.session_state.messages.append(
         {
             "role": "user",
@@ -362,6 +400,7 @@ if question:
                 response_data = call_api(
                     question=question,
                     top_k=top_k,
+                    context=previous_context,
                 )
 
                 answer = response_data.get(
@@ -371,19 +410,13 @@ if question:
 
                 st.markdown(answer)
 
-                display_sources(
-                    response_data.get(
-                        "sources",
-                        [],
-                    )
-                )
-
                 display_forms(
                     response_data.get(
                         "forms",
                         [],
                     )
                 )
+                display_service_links(response_data)
 
                 if show_technical_details:
                     display_metadata(

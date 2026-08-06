@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from classifier_service import predict_intent
+from backend.app.classifier.classifier_service import predict_intent
 
 
 TEST_QUESTIONS = [

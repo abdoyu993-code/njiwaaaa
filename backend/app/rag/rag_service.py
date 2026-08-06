@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from time import perf_counter
 from typing import Any
 
 from backend.app.classifier.classifier_service import (
@@ -11,6 +12,21 @@ from backend.app.rag.retriever import NarsaRetriever
 DEFAULT_CLARIFICATION_THRESHOLD = 0.60
 DEFAULT_MINIMUM_SIMILARITY_SCORE = 0.30
 DEFAULT_TOP_K = 3
+
+CARTE_GRISE_CASE_MARKERS = (
+    "premiere immatriculation",
+    "vehicule neuf",
+    "importe",
+    "importation",
+    "mutation",
+    "occasion",
+    "vente",
+    "echange",
+    "duplicata",
+    "perte",
+    "vol",
+    "modification",
+)
 
 
 INTENT_QUERY_HINTS: dict[str, str] = {
@@ -137,9 +153,13 @@ class NarsaRAGService:
         question = self._validate_question(question)
         top_k = max(1, top_k)
 
+        classification_started_at = perf_counter()
         classification = predict_intent(
             text=question,
             top_k=3,
+        )
+        classification_time_ms = self._elapsed_ms(
+            classification_started_at
         )
 
         domain = classification["domain"]
@@ -154,16 +174,50 @@ class NarsaRAGService:
         )
 
         if needs_clarification:
-            return self._build_clarification_response(
+            result = self._build_clarification_response(
                 question=question,
                 classification=classification,
             )
+
+            return {
+                **result,
+                "classification_time_ms": (
+                    classification_time_ms
+                ),
+                "retrieval_time_ms": 0.0,
+            }
+
+        needs_case_selection = (
+            intent == "carte_grise_demande"
+            and not self._contains_case_marker(question)
+        )
+
+        if needs_case_selection:
+            result = self._build_clarification_response(
+                question=question,
+                classification=classification,
+            )
+            result["message"] = (
+                "La démarche de carte grise dépend de votre cas :\n\n"
+                "- première immatriculation ;\n"
+                "- mutation d’un véhicule d’occasion ;\n"
+                "- échange de la carte grise ;\n"
+                "- duplicata après perte ou vol.\n\n"
+                "Précisez la situation qui vous concerne."
+            )
+
+            return {
+                **result,
+                "classification_time_ms": classification_time_ms,
+                "retrieval_time_ms": 0.0,
+            }
 
         retrieval_query = self._build_retrieval_query(
             question=question,
             intent=intent,
         )
 
+        retrieval_started_at = perf_counter()
         retrieved_chunks = self.retriever.search(
             query=retrieval_query,
             domain=domain,
@@ -172,17 +226,38 @@ class NarsaRAGService:
             original_query=question,
         )
 
+        retrieval_time_ms = self._elapsed_ms(
+            retrieval_started_at
+        )
+
+        intent_matched_chunks = [
+            chunk
+            for chunk in retrieved_chunks
+            if chunk.get("intent_match")
+        ]
+
+        if intent_matched_chunks:
+            retrieved_chunks = intent_matched_chunks
+
         relevant_chunks = self._filter_chunks(
             chunks=retrieved_chunks
         )
 
         if not relevant_chunks:
-            return self._build_no_context_response(
+            result = self._build_no_context_response(
                 question=question,
                 classification=classification,
                 retrieval_query=retrieval_query,
                 retrieved_chunks=retrieved_chunks,
             )
+
+            return {
+                **result,
+                "classification_time_ms": (
+                    classification_time_ms
+                ),
+                "retrieval_time_ms": retrieval_time_ms,
+            }
 
         sources = self._build_sources(
             chunks=relevant_chunks
@@ -203,7 +278,32 @@ class NarsaRAGService:
             "classification": classification,
             "contexts": relevant_chunks,
             "sources": sources,
+            "classification_time_ms": (
+                classification_time_ms
+            ),
+            "retrieval_time_ms": retrieval_time_ms,
         }
+
+    @staticmethod
+    def _elapsed_ms(
+        started_at: float,
+    ) -> float:
+        return round(
+            (perf_counter() - started_at) * 1000,
+            2,
+        )
+
+    @staticmethod
+    def _contains_case_marker(
+        question: str,
+    ) -> bool:
+        normalized = NarsaRetriever.normalize_for_matching(
+            question
+        )
+        return any(
+            marker in normalized
+            for marker in CARTE_GRISE_CASE_MARKERS
+        )
 
     @staticmethod
     def _validate_question(question: str) -> str:

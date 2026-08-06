@@ -5,6 +5,21 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class PreviousConversationContext(BaseModel):
+    previous_question: str = Field(
+        ...,
+        min_length=2,
+    )
+    previous_domain: str = Field(
+        ...,
+        min_length=1,
+    )
+    previous_intent: str = Field(
+        ...,
+        min_length=1,
+    )
+
+
 class AskRequest(BaseModel):
     question: str = Field(
         ...,
@@ -19,6 +34,8 @@ class AskRequest(BaseModel):
         description="Nombre maximal de chunks recherchés",
     )
 
+    context: PreviousConversationContext | None = None
+
 
 class AskSource(BaseModel):
     title: str | None = None
@@ -30,8 +47,15 @@ class AskSource(BaseModel):
 
 class AskForm(BaseModel):
     title: str
-    filename: str
+    filename: str | None = None
     download_url: str
+    button_label: str | None = None
+    is_external: bool = False
+
+
+class AskServiceLink(BaseModel):
+    label: str
+    url: str
 
 
 class AskResponse(BaseModel):
@@ -49,6 +73,9 @@ class AskResponse(BaseModel):
         default_factory=list
     )
     forms: list[AskForm] = Field(
+        default_factory=list
+    )
+    service_links: list[AskServiceLink] = Field(
         default_factory=list
     )
     metadata: dict[str, Any] = Field(

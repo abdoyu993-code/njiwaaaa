@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +23,24 @@ EMBEDDING_MODEL_NAME = (
 DEFAULT_TOP_K = 3
 DEFAULT_INTENT_BOOST = 0.18
 DEFAULT_CONTEXT_FACET_BOOST = 0.12
+DEFAULT_PROCEDURE_FACET_BOOST = 0.16
+
+PROCEDURE_QUERY_MARKERS = (
+    "comment",
+    "que dois je faire",
+    "que dois-je faire",
+    "demarche",
+    "procedure",
+    "prendre rendez vous",
+)
+
+PROCEDURE_SECTION_MARKERS = (
+    "demarche",
+    "etapes",
+    "processus",
+    "traitement de la demande",
+    "lieu de depot",
+)
 
 MUTATION_CONTEXT_INTENTS = {
     "mutation_vehicule",
@@ -330,6 +349,14 @@ class NarsaRetriever:
             normalize_embeddings=True,
         ).tolist()
 
+        normalized_original_query = self.normalize_for_matching(
+            original_query or query
+        )
+        asks_for_procedure = any(
+            marker in normalized_original_query
+            for marker in PROCEDURE_QUERY_MARKERS
+        )
+
         where_filter = None
 
         if len(profile.domains) == 1:
@@ -446,6 +473,47 @@ class NarsaRetriever:
 
             final_score += context_facet_boost
 
+            decomposed_document = unicodedata.normalize(
+                "NFD",
+                document.lower(),
+            )
+            normalized_document = "".join(
+                character
+                for character in decomposed_document
+                if unicodedata.category(character) != "Mn"
+            )
+            procedure_heading_match = bool(
+                asks_for_procedure
+                and re.search(
+                    r"(?m)^#{2,6}\s+(?:"
+                    + "|".join(
+                        re.escape(marker)
+                        for marker in PROCEDURE_SECTION_MARKERS
+                    )
+                    + r")\b",
+                    normalized_document,
+                )
+            )
+            has_procedure_steps = len(
+                re.findall(
+                    r"(?m)^\s*\d+[.)]\s+",
+                    normalized_document,
+                )
+            ) >= 3
+            procedure_match = bool(
+                asks_for_procedure
+                and (
+                    procedure_heading_match
+                    or has_procedure_steps
+                )
+            )
+            procedure_facet_boost = (
+                DEFAULT_PROCEDURE_FACET_BOOST
+                if procedure_match
+                else 0.0
+            )
+            final_score += procedure_facet_boost
+
             final_score = max(
                 0.0,
                 min(
@@ -504,6 +572,14 @@ class NarsaRetriever:
                         context_facet_boost,
                         4,
                     ),
+                    "procedure_match": procedure_match,
+                    "procedure_heading_match": (
+                        procedure_heading_match
+                    ),
+                    "procedure_facet_boost": round(
+                        procedure_facet_boost,
+                        4,
+                    ),
                     "similarity_score": round(
                         final_score,
                         4,
@@ -515,6 +591,8 @@ class NarsaRetriever:
             key=lambda item: (
                 item["context_coverage"],
                 item["intent_match"],
+                item["procedure_heading_match"],
+                item["procedure_match"],
                 item["similarity_score"],
                 item["semantic_score"],
             ),
@@ -523,6 +601,11 @@ class NarsaRetriever:
 
         selected_chunks = candidates[:top_k]
 
+        if asks_for_procedure:
+            self._attach_ordered_document_content(
+                selected_chunks
+            )
+
         for rank, chunk in enumerate(
             selected_chunks,
             start=1,
@@ -530,6 +613,83 @@ class NarsaRetriever:
             chunk["rank"] = rank
 
         return selected_chunks
+
+    def _attach_ordered_document_content(
+        self,
+        chunks: list[dict[str, Any]],
+    ) -> None:
+        """Ajoute le contenu ordonné du document sans modifier ChromaDB."""
+        document_cache: dict[str, str] = {}
+
+        for chunk in chunks:
+            source_field = (
+                "relative_path"
+                if chunk.get("relative_path")
+                else "filename"
+            )
+            source_value = chunk.get(source_field)
+
+            if not source_value:
+                continue
+
+            cache_key = f"{source_field}:{source_value}"
+
+            if cache_key not in document_cache:
+                try:
+                    result = self.collection.get(
+                        where={source_field: source_value},
+                        include=["documents", "metadatas"],
+                    )
+                    documents = result.get("documents", [])
+                    metadatas = result.get("metadatas", [])
+                    ordered_chunks = sorted(
+                        zip(metadatas, documents),
+                        key=lambda item: int(
+                            item[0].get("chunk_index", 0)
+                        ),
+                    )
+                    document_cache[cache_key] = (
+                        self._merge_ordered_chunks(
+                            [item[1] for item in ordered_chunks]
+                        )
+                    )
+                except Exception:
+                    document_cache[cache_key] = ""
+
+            full_content = document_cache[cache_key]
+
+            if full_content:
+                chunk["document_content"] = full_content
+
+    @staticmethod
+    def _merge_ordered_chunks(
+        chunks: list[str],
+    ) -> str:
+        """Réassemble des chunks chevauchants dans leur ordre initial."""
+        merged = ""
+
+        for raw_chunk in chunks:
+            chunk = str(raw_chunk or "").strip()
+
+            if not chunk:
+                continue
+
+            if not merged:
+                merged = chunk
+                continue
+
+            maximum_overlap = min(len(merged), len(chunk), 600)
+            overlap = 0
+
+            for size in range(maximum_overlap, 39, -1):
+                if merged.endswith(chunk[:size]):
+                    overlap = size
+                    break
+
+            separator = "" if overlap else "\n\n"
+            merged += separator + chunk[overlap:]
+
+        return merged.strip()
 
 
 if __name__ == "__main__":
