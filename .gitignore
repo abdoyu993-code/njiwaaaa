@@ -1,4 +1,7 @@
 .env
 backend/data/chroma_db/
+backend/data/*.db
 __pycache__/
 *.pyc
+.venv/
+.Rhistory

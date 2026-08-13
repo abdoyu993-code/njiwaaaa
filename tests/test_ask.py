@@ -73,6 +73,7 @@ def test_normal_narsa_question_uses_default_top_k_three(
     def fake_generate_answer(
         question: str,
         top_k: int,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         received["question"] = question
         received["top_k"] = top_k
@@ -241,6 +242,7 @@ def test_ambiguous_question_requests_clarification(
     def fake_generate_answer(
         question: str,
         top_k: int,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         return {
             "question": question,

@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Portail de suivi des réclamations — NARSA</title>
+  <meta name="description" content="Portail officiel NARSA : assistant intelligent, dépôt et suivi des réclamations, espace collaborateur." />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23ffffff'/%3E%3Ctext x='16' y='22' font-family='Arial' font-size='15' font-weight='bold' text-anchor='middle' fill='%231b3f94'%3EN%3C/text%3E%3Cpath d='M4 26h24' stroke='%23f0a11a' stroke-width='3'/%3E%3C/svg%3E" />
+</head>
+<body>
+
+<!-- ====================== Icônes ====================== -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="7.5" width="16" height="12" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 7.5V4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="3" r="1.4" fill="currentColor"/><circle cx="9" cy="13" r="1.3" fill="currentColor"/><circle cx="15" cy="13" r="1.3" fill="currentColor"/><path d="M9.5 16.5h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-plusbox" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 8.5v7M8.5 12h7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m16 16 4.5 4.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-route" viewBox="0 0 24 24"><path d="M7 20c0-4 10-4 10-8 0-2.2-1.8-4-4-4H9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="6.5" cy="8" r="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="17.5" cy="19" r="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 12h17M12 3.5c2.4 2.4 3.6 5.3 3.6 8.5s-1.2 6.1-3.6 8.5c-2.4-2.4-3.6-5.3-3.6-8.5S9.6 5.9 12 3.5Z" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-5.2A8 8 0 0 1 5 5.6 8 8 0 0 1 13 4a8 8 0 0 1 8 8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="9.5" cy="12" r="1.1" fill="currentColor"/><circle cx="13" cy="12" r="1.1" fill="currentColor"/><circle cx="16.5" cy="12" r="1.1" fill="currentColor"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h13m-5-5 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 11.5 20 4l-7 16-2.5-6.5L4 11.5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.7" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 5 6v6c0 4.2 2.9 7.9 7 9 4.1-1.1 7-4.8 7-9V6Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m9 12 2.2 2.2L15.5 10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V6m0 14h16M8 20v-6m4 6V9m4 11v-8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8M4 5v4h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 8v4.5l3 1.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M15 5h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-3M11 16l-4-4 4-4M7 12h10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10m0 0 4-4m-4 4-4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13.5a3.5 3.5 0 0 0 5 0l3-3a3.5 3.5 0 0 0-5-5l-1 1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M14 10.5a3.5 3.5 0 0 0-5 0l-3 3a3.5 3.5 0 0 0 5 5l1-1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.5 4h3l1.5 4-2 1.5a11 11 0 0 0 5.5 5.5L16 13l4 1.5v3a2 2 0 0 1-2.2 2A15.5 15.5 0 0 1 4.5 6.2 2 2 0 0 1 6.5 4Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3.5" y="5.5" width="17" height="13" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m4 7 8 6 8-6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-5.6 7-11a7 7 0 1 0-14 0c0 5.4 7 11 7 11Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M15.5 5.5h-11v11" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="i-tag" viewBox="0 0 24 24"><path d="M4 11V5h6l9 9-6 6-9-9Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="8" cy="9" r="1.3" fill="currentColor"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4 10h16M9 3.5v4M15 3.5v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-category" viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m3 13 9 5 9-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-spinner" viewBox="0 0 24 24"><path d="M12 4.5a7.5 7.5 0 1 1-7.1 5.1" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+  <symbol id="i-mailsend" viewBox="0 0 24 24"><path d="M4 6.5h16v11H4z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m4.5 7 7.5 6 7.5-6" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="4" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 10v8.5h13V10M10 14h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 11v5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="8" r="1.1" fill="currentColor"/></symbol>
+  <symbol id="i-headset" viewBox="0 0 24 24"><path d="M5 15v-3a7 7 0 0 1 14 0v3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="3" y="13.5" width="4" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="17" y="13.5" width="4" height="6" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/></symbol>
+  <symbol id="i-faq" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9.6 9.5a2.4 2.4 0 1 1 3.2 2.3c-.6.2-.8.7-.8 1.2v.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="16.2" r="1" fill="currentColor"/></symbol>
+</svg>
+
+<!-- ====================== En-tête services ====================== -->
+<div class="topstrip"></div>
+
+<header class="service-header" id="service-header">
+  <div class="service-header__inner">
+    <a class="service-header__narsa" href="#/accueil" aria-label="NARSA Services — Accueil">
+      <img src="assets/logo-narsa-services.png" alt="NARSA Services" />
+    </a>
+
+    <div class="service-header__institutions" aria-label="Institutions partenaires">
+      <img src="assets/logo-ministere.png"
+           alt="Royaume du Maroc — Ministère du Transport et de la Logistique" />
+      <span class="service-header__divider" aria-hidden="true"></span>
+      <img src="assets/logo-agence-transports.png"
+           alt="Agence Nationale de Réglementation des Activités relatives aux Transports" />
+    </div>
+
+    <div class="service-header__actions">
+      <span class="lang">Français <span aria-hidden="true">⌄</span></span>
+      <a class="btn btn--primary btn--sm service-header__login" href="#/admin">
+        <span class="service-header__public-label">Espace collaborateur</span>
+        <span class="service-header__agent-label"><svg class="ico"><use href="#i-user"/></svg>Agent NARSA</span>
+      </a>
+      <div class="topbar__agent">
+        <span class="topbar__badge">
+          <svg class="ico"><use href="#i-user"/></svg>
+          <span id="topbar-agent-name">Agent NARSA</span>
+        </span>
+        <button class="btn btn--ghost btn--sm" type="button" id="topbar-logout" aria-label="Se déconnecter">
+          <svg class="ico"><use href="#i-logout"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<header class="gov-header tracking-header">
+  <div class="gov-header__inner">
+    <a class="gov-brand" href="#/accueil">
+      <img src="assets/logo-ministere.png"
+           alt="Royaume du Maroc — Ministère du Transport et de la Logistique" />
+    </a>
+    <div class="gov-title">
+      <p class="gov-title__ar">بوابة تتبع الشكايات</p>
+      <h1 class="gov-title__fr">Portail de suivi des réclamations</h1>
+    </div>
+    <div class="narsa-logo">
+      <img src="assets/logo-narsa.png"
+           alt="NARSA — Agence Nationale de la Sécurité Routière" />
+    </div>
+  </div>
+</header>
+
+<nav class="mainnav service-nav" id="topbar" aria-label="Navigation principale">
+  <div class="mainnav__inner">
+    <button class="burger" id="burger" aria-label="Ouvrir le menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+
+    <div class="mainnav__links">
+      <a href="#/accueil" data-nav="accueil"><svg class="ico"><use href="#i-home"/></svg>Accueil</a>
+      <a href="#actualites"><svg class="ico"><use href="#i-history"/></svg>Actualités</a>
+      <a href="#/reclamation" data-nav="reclamation"><svg class="ico"><use href="#i-plusbox"/></svg>Déposer une réclamation</a>
+      <a href="#/suivi" data-nav="suivi"><svg class="ico"><use href="#i-search"/></svg>Suivre une réclamation</a>
+      <a href="#/assistant"><svg class="ico"><use href="#i-faq"/></svg>Aides &amp; FAQ</a>
+    </div>
+  </div>
+</nav>
+
+<nav class="mainnav tracking-nav" aria-label="Navigation du portail de suivi">
+  <div class="mainnav__inner">
+    <div class="mainnav__links">
+      <a href="#/accueil" data-nav="accueil"><svg class="ico"><use href="#i-home"/></svg>Accueil</a>
+      <a href="#/assistant" data-nav="assistant"><svg class="ico"><use href="#i-bot"/></svg>Assistant IA</a>
+      <a href="#/reclamation" data-nav="reclamation"><svg class="ico"><use href="#i-plusbox"/></svg>Déposer une réclamation</a>
+      <a href="#/suivi" data-nav="suivi"><svg class="ico"><use href="#i-search"/></svg>Suivi réclamation</a>
+    </div>
+    <div class="mainnav__right">
+      <span class="lang"><svg class="ico"><use href="#i-globe"/></svg>Français <span aria-hidden="true">⌄</span></span>
+    </div>
+  </div>
+</nav>
+
+<main id="main">
+
+  <!-- ====================== Accueil ====================== -->
+  <section class="page" id="page-accueil" hidden>
+    <div class="container">
+      <div class="hero">
+        <div class="hero__text">
+          <h2>Vos démarches,<br />en toute simplicité</h2>
+          <p>
+            La plateforme officielle de la NARSA pour vous informer,
+            déposer vos réclamations et suivre vos demandes.
+          </p>
+          <a class="btn btn--light" href="#/assistant">
+            Commencer vos services
+            <svg class="ico"><use href="#i-arrow"/></svg>
+          </a>
+        </div>
+        <div class="hero__visual">
+          <img src="assets/hero-batiment.png" alt="Siège de la NARSA" />
+        </div>
+      </div>
+
+      <div class="services">
+        <a class="service" href="#/assistant">
+          <span class="service__icon service__icon--blue"><svg class="ico"><use href="#i-bot"/></svg></span>
+          <h3>Assistant intelligent</h3>
+          <p>Posez vos questions et obtenez des réponses.</p>
+          <span class="service__link">Accéder <svg class="ico"><use href="#i-arrow"/></svg></span>
+        </a>
+        <a class="service" href="#/reclamation">
+          <span class="service__icon service__icon--indigo"><svg class="ico"><use href="#i-file"/></svg></span>
+          <h3>Déposer une réclamation</h3>
+          <p>Soumettez votre réclamation en quelques clics.</p>
+          <span class="service__link">Déposer <svg class="ico"><use href="#i-arrow"/></svg></span>
+        </a>
+        <a class="service" href="#/suivi">
+          <span class="service__icon service__icon--sky"><svg class="ico"><use href="#i-search"/></svg></span>
+          <h3>Suivre une réclamation</h3>
+          <p>Consultez le statut de vos réclamations en cours à tout moment.</p>
+          <span class="service__link">Suivre <svg class="ico"><use href="#i-arrow"/></svg></span>
+        </a>
+        <a class="service" href="#/admin">
+          <span class="service__icon service__icon--amber"><svg class="ico"><use href="#i-user"/></svg></span>
+          <h3>Espace collaborateur</h3>
+          <p>Accès réservé à votre espace sécurisé et personnalisé.</p>
+          <span class="service__link">Se connecter <svg class="ico"><use href="#i-arrow"/></svg></span>
+        </a>
+      </div>
+
+      <section class="problem-card" id="problem-card">
+        <div class="problem-card__text">
+          <span class="problem-card__tag">Nouveau</span>
+          <h2>J'ai un problème — que dois-je faire ?</h2>
+          <p>
+            Décrivez simplement votre situation. L'assistant identifie la
+            démarche, construit toutes les étapes dans l'ordre, liste les
+            documents et les formulaires, et suit votre progression.
+          </p>
+          <div class="problem-card__examples">
+            <button class="chip" data-goal="J'ai acheté une voiture d'occasion">J'ai acheté une voiture d'occasion</button>
+            <button class="chip" data-goal="J'ai perdu mon permis de conduire">J'ai perdu mon permis</button>
+            <button class="chip" data-goal="Je veux contester une contravention">Je conteste une contravention</button>
+          </div>
+        </div>
+        <form class="problem-card__form" id="problem-form">
+          <label for="problem-input">Votre situation</label>
+          <textarea id="problem-input" rows="3" placeholder="Exemple : j'ai acheté une voiture d'occasion la semaine dernière..."></textarea>
+          <button class="btn btn--accent btn--block" type="submit">
+            <svg class="ico"><use href="#i-arrow"/></svg>
+            Construire mon parcours
+          </button>
+          <p class="muted" id="problem-hint"></p>
+        </form>
+      </section>
+
+      <div class="home-grid" id="actualites">
+        <section class="panel">
+          <div class="panel__head">
+            <h3>Actualités</h3>
+            <a href="#/assistant">Voir tout <svg class="ico"><use href="#i-chevron"/></svg></a>
+          </div>
+          <article class="news">
+            <span class="news__date"><strong>28</strong>07</span>
+            <div>
+              <h4>Campagne nationale de sensibilisation</h4>
+              <p>La NARSA lance une nouvelle campagne pour la sécurité routière et la qualité des infrastructures.</p>
+            </div>
+          </article>
+          <article class="news">
+            <span class="news__date"><strong>06</strong>08</span>
+            <div>
+              <h4>Nouveaux services en ligne</h4>
+              <p>Découvrez le nouveau service de prise de rendez-vous pour les contrôles techniques.</p>
+            </div>
+          </article>
+        </section>
+
+        <section class="panel">
+          <div class="panel__head"><h3>Chiffres clés</h3></div>
+          <div class="figures" id="home-figures">
+            <div class="figure">
+              <span class="figure__icon"><svg class="ico"><use href="#i-file"/></svg></span>
+              <strong id="figure-complaints">1 248 593</strong>
+              <span>Réclamations traitées</span>
+            </div>
+            <div class="figure">
+              <span class="figure__icon"><svg class="ico"><use href="#i-chat"/></svg></span>
+              <strong id="figure-conversations">312 875</strong>
+              <span>Demandes citoyennes</span>
+            </div>
+            <div class="figure">
+              <span class="figure__icon"><svg class="ico"><use href="#i-shield"/></svg></span>
+              <strong id="figure-sources">95 %</strong>
+              <span>Taux de satisfaction</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel panel--help">
+          <div class="panel__head"><h3>Besoin d'aide ?</h3></div>
+          <p>Notre assistant est disponible pour vous accompagner.</p>
+          <img class="panel-help__image" src="assets/illu-support.png" alt="Assistance NARSA" />
+          <a class="btn btn--primary" href="#/assistant">Poser une question</a>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== Parcours guidé ====================== -->
+  <section class="page" id="page-parcours" hidden>
+    <div class="container container--narrow">
+      <header class="page-head">
+        <h2>Mon parcours administratif</h2>
+        <p>Chaque étape provient des documents officiels de la NARSA.</p>
+      </header>
+
+      <div id="journey-container"></div>
+
+      <div class="card" id="journey-empty" hidden>
+        <h3>Aucun parcours en cours</h3>
+        <p class="muted">
+          Décrivez votre situation depuis l'accueil, ou choisissez
+          directement une démarche :
+        </p>
+        <div class="chips" id="journey-catalogue"></div>
+        <p class="muted">Vous avez déjà une référence de parcours ?</p>
+        <form class="journey-resume" id="journey-resume">
+          <input id="journey-reference" placeholder="PARC-2026-XXXXXX" />
+          <button class="btn btn--ghost" type="submit">Reprendre</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== Assistant IA ====================== -->
+  <section class="page page--app" id="page-assistant" hidden>
+    <div class="applayout">
+      <aside class="sidebar">
+        <div class="sidebar__brand">
+          <img class="logo-invert" src="assets/logo-narsa.png" alt="NARSA" />
+          <small>Assistant IA</small>
+        </div>
+        <nav class="sidebar__nav">
+          <a href="#/assistant" class="is-active"><svg class="ico"><use href="#i-bot"/></svg>Assistant IA</a>
+          <a href="#/assistant"><svg class="ico"><use href="#i-chat"/></svg>Chat instantané</a>
+          <a href="#/reclamation"><svg class="ico"><use href="#i-file"/></svg>Réclamations</a>
+          <a href="#/assistant"><svg class="ico"><use href="#i-history"/></svg>Historique IA</a>
+          <a href="#/parcours"><svg class="ico"><use href="#i-faq"/></svg>Documentation</a>
+        </nav>
+        <div class="sidebar__help">
+          <p><strong>Besoin d'aide ?</strong></p>
+          <p>Contactez notre support ou consultez la FAQ.</p>
+          <img src="assets/illu-support.png" alt="" />
+        </div>
+      </aside>
+
+      <section class="chat" aria-label="Conversation avec l'assistant">
+        <header class="chat__header">
+          <span class="chat__avatar"><svg class="ico"><use href="#i-bot"/></svg></span>
+          <div>
+            <strong>Assistant IA</strong>
+            <small id="chat-status"><span class="dot"></span> En ligne</small>
+          </div>
+          <span class="chat__badge">Entraîné NARSA</span>
+        </header>
+
+        <div class="chat__messages" id="chat-messages" aria-live="polite"></div>
+
+        <div class="chat__suggestions" id="chat-suggestions">
+          <button class="chip" data-ask="Quels documents pour un duplicata de permis ?">Permis perdu</button>
+          <button class="chip" data-ask="Quels sont les documents nécessaires pour la carte grise ?">Carte grise</button>
+          <button class="chip" data-ask="Comment prendre rendez-vous pour la visite technique ?">Visite technique</button>
+          <button class="chip" data-ask="Comment payer une contravention ?">Contravention</button>
+        </div>
+
+        <form class="chat__form" id="chat-form">
+          <input type="text" id="chat-input" autocomplete="off" placeholder="Posez votre message..." aria-label="Votre message" />
+          <button class="btn btn--accent btn--icon" type="submit" id="chat-send" aria-label="Envoyer">
+            <svg class="ico"><use href="#i-send"/></svg>
+          </button>
+        </form>
+      </section>
+    </div>
+  </section>
+
+  <!-- ====================== Déposer une réclamation ====================== -->
+  <section class="page" id="page-reclamation" hidden>
+    <div class="container">
+      <div class="form-layout">
+        <aside class="stepper">
+          <ol>
+            <li class="is-active"><span>1</span>Informations personnelles</li>
+            <li><span>2</span>Informations réclamation</li>
+            <li><span>3</span>Détails du service</li>
+            <li><span>4</span>Pièces jointes</li>
+            <li><span>5</span>Récapitulatif</li>
+          </ol>
+        </aside>
+
+        <div class="form-main">
+          <header class="page-head">
+            <h2>Déposer une réclamation</h2>
+            <p>Remplissez le formulaire ci-dessous pour soumettre votre réclamation.</p>
+          </header>
+
+          <form class="card form" id="complaint-form">
+            <h3 class="form__section">Informations personnelles</h3>
+            <div class="grid2">
+              <label>Nom et prénom *
+                <input name="full_name" required minlength="3" placeholder="Youssef El Amrani" />
+              </label>
+              <label>Adresse e-mail *
+                <input name="email" type="email" required placeholder="y.elamrani@example.com" />
+              </label>
+              <label>Téléphone *
+                <input name="phone" placeholder="06 60 00 00 00" />
+              </label>
+              <label>CIN
+                <input name="national_id" placeholder="AE123456" />
+              </label>
+              <label>Ville *
+                <input name="city" placeholder="Rabat" />
+              </label>
+              <label>Catégorie *
+                <select name="category" id="complaint-category" required></select>
+              </label>
+            </div>
+
+            <h3 class="form__section">Objet de la réclamation</h3>
+            <label>Objet *
+              <input name="subject" required minlength="3" placeholder="Merci de sélectionner l'un des choix" />
+            </label>
+
+            <label>Votre message *
+              <textarea name="message" required minlength="10" rows="5" placeholder="Décrivez en détail votre réclamation (dates, lieux, références, faits, etc.)"></textarea>
+            </label>
+
+            <div class="assist-bar">
+              <div>
+                <strong>Assistance intelligente</strong>
+                <p class="muted">
+                  L'assistant analyse votre demande, propose la bonne catégorie
+                  et vérifie si une réponse officielle existe déjà.
+                </p>
+              </div>
+              <button class="btn btn--ghost" type="button" id="analyze-button">
+                <svg class="ico"><use href="#i-bot"/></svg>
+                Analyser ma demande
+              </button>
+            </div>
+
+            <div class="analysis" id="complaint-analysis" hidden></div>
+
+            <div class="form__footer">
+              <a class="btn btn--ghost" href="#/accueil">Annuler</a>
+              <button class="btn btn--primary" type="submit" id="complaint-submit">Suivant</button>
+            </div>
+            <p class="alert" id="complaint-error" hidden></p>
+          </form>
+
+          <div class="card success" id="complaint-success" hidden>
+            <span class="success__icon"><svg class="ico"><use href="#i-check"/></svg></span>
+            <h3>Réclamation enregistrée</h3>
+            <p>Conservez cette référence pour suivre votre demande :</p>
+            <p class="reference" id="complaint-reference"></p>
+            <div class="success__actions">
+              <a class="btn btn--primary" href="#/suivi" id="complaint-track-link">Suivre ma réclamation</a>
+              <button class="btn btn--ghost" type="button" id="complaint-new">Déposer une autre réclamation</button>
+            </div>
+          </div>
+        </div>
+
+        <aside class="form-aside">
+          <section class="panel">
+            <div class="panel__head"><h3>À savoir</h3></div>
+            <ul class="checklist">
+              <li>Votre réclamation sera traitée confidentiellement.</li>
+              <li>Vous recevrez une réponse dans un délai de 15 jours.</li>
+              <li>Assurez-vous de joindre tous les justificatifs nécessaires.</li>
+            </ul>
+          </section>
+          <section class="panel panel--help">
+            <div class="panel__head"><h3>Besoin d'aide ?</h3></div>
+            <p>Contactez notre support intelligent.</p>
+            <a class="btn btn--primary btn--sm" href="#/assistant">
+              <svg class="ico"><use href="#i-headset"/></svg>
+              Chat instantané
+            </a>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== Suivi réclamation ====================== -->
+  <section class="page" id="page-suivi" hidden>
+    <div class="container">
+      <div class="track-hero">
+        <div class="track-hero__illu" aria-hidden="true">
+          <img src="assets/illu-suivi.png" alt="" />
+        </div>
+
+        <div class="track-hero__text">
+          <h2>Suivre votre réclamation</h2>
+          <p>
+            Saisissez la référence de suivi fournie lors du dépôt de votre réclamation
+            pour consulter l'état d'avancement et le détail du traitement.
+          </p>
+
+          <form class="track-form card" id="tracking-form">
+            <label class="track-form__label">Référence de suivi</label>
+            <div class="track-form__row">
+              <input name="reference" id="tracking-reference" required placeholder="Ex. : NARSA-2026-062WAB" />
+              <button class="btn btn--primary" type="submit">
+                <svg class="ico"><use href="#i-search"/></svg>
+                Rechercher
+              </button>
+            </div>
+            <label class="track-form__email">Adresse e-mail utilisée lors du dépôt
+              <input name="email" type="email" required placeholder="vous@exemple.ma" />
+            </label>
+            <p class="track-form__hint">
+              <svg class="ico"><use href="#i-info"/></svg>
+              Retrouvez votre référence dans l'e-mail de confirmation de dépôt.
+            </p>
+            <p class="alert" id="tracking-error" hidden></p>
+          </form>
+        </div>
+
+        <div class="track-hero__secure">
+          <span class="secure__icon"><svg class="ico"><use href="#i-shield"/></svg></span>
+          <div>
+            <strong>Service sécurisé</strong>
+            <p>Vos données sont protégées</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="track-layout">
+        <div id="tracking-result"></div>
+
+        <aside class="help-card">
+          <h3>Besoin d'aide ?</h3>
+          <div class="help-card__illu" aria-hidden="true">
+            <img src="assets/illu-support.png" alt="" />
+          </div>
+          <p class="help-card__title">Notre équipe est à votre écoute</p>
+          <p class="help-card__lead">
+            Pour toute question ou information complémentaire concernant votre
+            réclamation, nous sommes là pour vous accompagner.
+          </p>
+          <div class="contact-row">
+            <span class="contact-row__icon"><svg class="ico"><use href="#i-phone"/></svg></span>
+            <div>
+              <small>Téléphone</small>
+              <strong>0537 71 17 17</strong>
+              <small>Du lundi au vendredi de 08h30 à 16h30</small>
+            </div>
+          </div>
+          <div class="contact-row">
+            <span class="contact-row__icon"><svg class="ico"><use href="#i-mail"/></svg></span>
+            <div>
+              <small>E-mail</small>
+              <strong>reclamations@narsa.gov.ma</strong>
+              <small>Réponse sous 48h ouvrables</small>
+            </div>
+          </div>
+          <a class="faq-row" href="#/assistant">
+            <span class="contact-row__icon"><svg class="ico"><use href="#i-faq"/></svg></span>
+            FAQ - Questions fréquentes
+            <svg class="ico faq-row__chevron"><use href="#i-chevron"/></svg>
+          </a>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== Connexion collaborateur ====================== -->
+  <section class="page" id="page-admin" hidden>
+    <div class="login">
+      <div class="login__aside">
+        <img class="login__mark logo-invert" src="assets/logo-narsa.png" alt="NARSA" />
+        <h2>Espace collaborateur</h2>
+        <p>Accès réservé aux agents de la NARSA.</p>
+        <ul class="login__features">
+          <li><svg class="ico"><use href="#i-shield"/></svg> Sécurisé</li>
+          <li><svg class="ico"><use href="#i-chart"/></svg> Piloté par les données</li>
+          <li><svg class="ico"><use href="#i-history"/></svg> Traçable</li>
+        </ul>
+      </div>
+
+      <form class="login__form card" id="login-form">
+        <h2>Connexion</h2>
+        <p class="muted">Identifiez-vous pour accéder au Dashboard IA et aux réclamations.</p>
+
+        <label>Nom d'utilisateur
+          <span class="input-icon">
+            <svg class="ico"><use href="#i-user"/></svg>
+            <input name="username" required autocomplete="username" placeholder="agent" />
+          </span>
+        </label>
+
+        <label>Mot de passe
+          <span class="input-icon">
+            <svg class="ico"><use href="#i-lock"/></svg>
+            <input name="password" type="password" required autocomplete="current-password" placeholder="••••••••" />
+          </span>
+        </label>
+
+        <button class="btn btn--primary btn--block" type="submit">Se connecter</button>
+        <p class="alert" id="login-error" hidden></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ====================== Administration ====================== -->
+  <section class="page page--app" id="page-dashboard" hidden>
+    <div class="applayout">
+      <aside class="sidebar">
+        <div class="sidebar__brand">
+          <img class="logo-invert" src="assets/logo-narsa.png" alt="NARSA" />
+          <small>Administration</small>
+        </div>
+        <nav class="sidebar__nav" id="admin-nav">
+          <a href="#" class="is-active" data-tab="dashboard"><svg class="ico"><use href="#i-chart"/></svg>Dashboard IA</a>
+          <a href="#" data-tab="complaints"><svg class="ico"><use href="#i-file"/></svg>Réclamations</a>
+          <a href="#" data-tab="history"><svg class="ico"><use href="#i-history"/></svg>Historique IA</a>
+          <a href="#"><svg class="ico"><use href="#i-user"/></svg>Utilisateurs</a>
+          <a href="#"><svg class="ico"><use href="#i-shield"/></svg>Paramètres</a>
+          <a href="#" data-tab="logout"><svg class="ico"><use href="#i-logout"/></svg>Déconnexion</a>
+        </nav>
+        <small class="sidebar__copyright">© NARSA 2026 — Tous droits réservés</small>
+      </aside>
+
+      <section class="admin">
+        <header class="admin__header">
+          <div>
+            <h2 id="admin-title">Dashboard IA</h2>
+            <p class="muted" id="admin-subtitle">Vue d'ensemble de l'activité de la plateforme</p>
+          </div>
+          <div class="admin__institutions">
+            <img src="assets/logo-ministere.png" alt="Ministère du Transport et de la Logistique" />
+            <img src="assets/logo-agence-transports.png" alt="Agence Nationale des Transports" />
+          </div>
+          <div class="admin__tools">
+            <label class="select-inline">
+              Période
+              <select id="dashboard-period">
+                <option value="7" selected>7 jours</option>
+                <option value="14">14 jours</option>
+                <option value="30">30 jours</option>
+                <option value="90">90 jours</option>
+              </select>
+            </label>
+            <span class="admin__user"><svg class="ico"><use href="#i-user"/></svg><span id="admin-user">Agent</span></span>
+          </div>
+        </header>
+
+        <div class="admin__body" id="admin-dashboard-tab">
+          <div class="alerts" id="alerts"></div>
+          <div class="kpis" id="kpis"></div>
+
+          <div class="grid-charts">
+            <figure class="card chart-card">
+              <figcaption>
+                <h3>Évolution des conversations</h3>
+                <p class="muted">Nombre par jour</p>
+              </figcaption>
+              <div id="chart-timeseries" class="chart"></div>
+            </figure>
+
+            <figure class="card chart-card">
+              <figcaption>
+                <h3>Répartition par domaines</h3>
+                <p class="muted">Pourcentage des conversations</p>
+              </figcaption>
+              <div id="chart-domains" class="chart chart--donut"></div>
+            </figure>
+
+            <figure class="card chart-card">
+              <figcaption>
+                <h3>Top intentions</h3>
+                <p class="muted">Intentions les plus détectées</p>
+              </figcaption>
+              <div id="chart-intents" class="chart"></div>
+            </figure>
+
+            <figure class="card chart-card">
+              <figcaption>
+                <h3>Analyse du chatbot</h3>
+                <p class="muted">Nature des réponses produites</p>
+              </figcaption>
+              <div id="chart-answers" class="chart chart--donut"></div>
+            </figure>
+          </div>
+
+          <figure class="card chart-card" id="blind-spots-card">
+            <figcaption>
+              <h3>Angles morts documentaires</h3>
+              <p class="muted">
+                Sujets regroupés automatiquement parmi les questions restées
+                sans réponse fiable : ce sont les documents à rédiger ou à
+                compléter en priorité.
+              </p>
+            </figcaption>
+            <div id="blind-spots"></div>
+          </figure>
+
+          <div class="card">
+            <div class="card__head">
+              <h3>Historique récent</h3>
+              <button class="btn btn--ghost btn--sm" type="button" id="export-conversations">
+                <svg class="ico"><use href="#i-download"/></svg>
+                Exporter en CSV
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table class="table" id="recent-table">
+                <thead>
+                  <tr><th>Question</th><th>Domaine</th><th>Intention</th><th>Confiance</th><th>Temps</th><th>Date</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div class="admin__body" id="admin-complaints-tab" hidden>
+          <div class="kpis kpis--status" id="complaints-kpis"></div>
+
+          <div class="card">
+            <div class="filters">
+              <label>Statut
+                <select id="filter-status">
+                  <option value="">Tous</option>
+                  <option value="recue">Reçue</option>
+                  <option value="en_cours">En cours de traitement</option>
+                  <option value="traitee">Traitée</option>
+                  <option value="rejetee">Rejetée</option>
+                </select>
+              </label>
+              <label>Priorité
+                <select id="filter-priority">
+                  <option value="">Toutes</option>
+                  <option value="urgente">Urgente</option>
+                  <option value="haute">Haute</option>
+                  <option value="normale">Normale</option>
+                </select>
+              </label>
+              <label>Recherche
+                <input id="filter-search" placeholder="Référence, nom, email, objet" />
+              </label>
+              <button class="btn btn--ghost" id="filter-apply" type="button">Filtrer</button>
+              <button class="btn btn--ghost" id="export-complaints" type="button">
+                <svg class="ico"><use href="#i-download"/></svg>
+                Exporter
+              </button>
+              <span class="muted" id="complaints-count"></span>
+            </div>
+            <div class="table-wrap">
+              <table class="table" id="complaints-table">
+                <thead>
+                  <tr><th>Référence</th><th>Citoyen</th><th>Catégorie</th><th>Objet</th><th>Priorité</th><th>Statut</th><th>Déposée le</th><th></th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div id="complaint-detail"></div>
+        </div>
+
+        <div class="admin__body" id="admin-history-tab" hidden>
+          <div class="card">
+            <h3>Historique des échanges</h3>
+            <div class="table-wrap">
+              <table class="table" id="history-table">
+                <thead>
+                  <tr><th>Question</th><th>Domaine</th><th>Intention</th><th>Confiance</th><th>Statut</th><th>Date</th></tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </section>
+</main>
+
+<!-- ====================== Lecteur de source ====================== -->
+<div class="modal" id="source-modal" hidden>
+  <div class="modal__backdrop" data-close-modal></div>
+  <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="source-title">
+    <header class="modal__head">
+      <div>
+        <p class="modal__eyebrow">Document officiel NARSA</p>
+        <h3 id="source-title">Source</h3>
+      </div>
+      <button class="btn btn--ghost btn--sm" type="button" data-close-modal>Fermer</button>
+    </header>
+    <div class="modal__body" id="source-body"></div>
+  </div>
+</div>
+
+<!-- ====================== Pied de page ====================== -->
+<footer class="site-footer" id="footer">
+  <div class="container site-footer__inner">
+    <div class="site-footer__brand">
+      <img class="logo-invert" src="assets/logo-narsa.png"
+           alt="NARSA — Agence Nationale de la Sécurité Routière" />
+      <div class="socials">
+        <span class="social">in</span>
+        <span class="social">▶</span>
+        <span class="social">✕</span>
+        <span class="social">f</span>
+      </div>
+    </div>
+
+    <nav class="site-footer__col">
+      <h4>Liens rapides</h4>
+      <a href="#/accueil"><svg class="ico"><use href="#i-chevron"/></svg>Accueil</a>
+      <a href="#/reclamation"><svg class="ico"><use href="#i-chevron"/></svg>Déposer une réclamation</a>
+      <a href="#/suivi"><svg class="ico"><use href="#i-chevron"/></svg>Suivi réclamation</a>
+      <a href="#/assistant"><svg class="ico"><use href="#i-chevron"/></svg>Assistant IA</a>
+    </nav>
+
+    <div class="site-footer__col">
+      <h4>À propos de NARSA</h4>
+      <p>
+        NARSA œuvre pour la sécurité routière à travers la prévention,
+        la sensibilisation et le contrôle pour des routes plus sûres
+        pour tous.
+      </p>
+    </div>
+
+    <div class="site-footer__col">
+      <h4>Nous contacter</h4>
+      <p><svg class="ico"><use href="#i-pin"/></svg>Rabat, Maroc</p>
+      <p><svg class="ico"><use href="#i-phone"/></svg>0537 71 17 17</p>
+      <p><svg class="ico"><use href="#i-mail"/></svg>contact@narsa.gov.ma</p>
+    </div>
+
+    <nav class="site-footer__col">
+      <h4>Documents utiles</h4>
+      <a href="#/parcours"><svg class="ico"><use href="#i-chevron"/></svg>Guide de la réclamation</a>
+      <a href="#/parcours"><svg class="ico"><use href="#i-chevron"/></svg>Charte du citoyen</a>
+      <a href="#/accueil"><svg class="ico"><use href="#i-chevron"/></svg>Mentions légales</a>
+      <a href="#/accueil"><svg class="ico"><use href="#i-chevron"/></svg>Politique de confidentialité</a>
+    </nav>
+  </div>
+
+  <div class="site-footer__bottom">
+    <div class="container site-footer__bottom-inner">
+      <span>© 2026 NARSA — Tous droits réservés</span>
+      <nav class="footer-legal" aria-label="Liens légaux">
+        <a href="#/accueil">Mentions légales</a>
+        <a href="#/accueil">Politique de confidentialité</a>
+        <a href="#/assistant">Contact</a>
+      </nav>
+      <span id="api-status">e-NARSA 2026 — Tous droits réservés</span>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

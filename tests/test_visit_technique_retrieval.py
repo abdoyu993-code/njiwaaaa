@@ -115,14 +115,11 @@ class FakeEmbeddingModel:
     def encode(
         self,
         text: str,
-        normalize_embeddings: bool,
+        **kwargs: Any,
     ) -> Any:
-        class FakeEmbedding:
-            @staticmethod
-            def tolist() -> list[float]:
-                return [0.1, 0.2]
+        import numpy as np
 
-        return FakeEmbedding()
+        return np.array([0.1, 0.2], dtype="float32")
 
 
 class FakeCollection:

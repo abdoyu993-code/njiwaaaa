@@ -36,6 +36,15 @@ class AskRequest(BaseModel):
 
     context: PreviousConversationContext | None = None
 
+    session_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description=(
+            "Identifiant de session du navigateur, "
+            "utilisé pour les statistiques."
+        ),
+    )
+
 
 class AskSource(BaseModel):
     title: str | None = None
@@ -77,6 +86,13 @@ class AskResponse(BaseModel):
     )
     service_links: list[AskServiceLink] = Field(
         default_factory=list
+    )
+    related_questions: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Questions proches réellement traitées "
+            "par l'assistant."
+        ),
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict

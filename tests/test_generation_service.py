@@ -583,3 +583,133 @@ def test_permit_fallback_starts_with_complete_citizen_procedure() -> None:
     assert "vérifie et valide le dossier" in answer
     assert "reçoit un SMS" in answer
     assert "récupéré dans l’agence de dépôt" in answer
+
+
+DOCUMENT_WITH_METADATA = """# Paiement des amendes
+
+## Métadonnées
+
+- Domaine : infractions
+- Intentions concernées :
+  - paiement_amende
+  - montant_amende
+- Source : NARSA Services
+- Langue : français
+
+## Délai de paiement
+
+Le délai est de 30 jours à compter de la notification.
+
+## Montants
+
+- paiement dans les 24 heures : 150 dirhams ;
+- paiement dans les 15 jours : 200 dirhams.
+"""
+
+
+def test_document_excerpt_drops_internal_metadata() -> None:
+    cleaned = NarsaGenerationService._clean_document_excerpt(
+        DOCUMENT_WITH_METADATA
+    )
+
+    assert "Métadonnées" not in cleaned
+    assert "Domaine :" not in cleaned
+    assert "paiement_amende" not in cleaned
+    assert "Langue" not in cleaned
+    assert "# " not in cleaned
+
+    # Les sous-titres restent : ils donnent leur sens aux listes.
+    assert "Délai de paiement :" in cleaned
+    assert "Montants :" in cleaned
+    assert "150 dirhams" in cleaned
+
+
+def test_shorten_cuts_on_a_sentence_boundary() -> None:
+    text = (
+        "Première phrase complète. "
+        "Deuxième phrase complète. "
+        "Troisième phrase qui dépasse la limite."
+    )
+
+    shortened = NarsaGenerationService._shorten(
+        text,
+        max_chars=50,
+    )
+
+    assert len(shortened) <= 51
+    assert shortened.endswith(".")
+    assert "Première phrase complète" in shortened
+
+
+def test_shorten_keeps_short_content_untouched() -> None:
+    assert (
+        NarsaGenerationService._shorten("Texte court.")
+        == "Texte court."
+    )
+
+
+def test_fallback_quotes_documents_instead_of_refusing() -> None:
+    contexts = [
+        {
+            "content": DOCUMENT_WITH_METADATA,
+            "filename": "paiement_amendes_narsa.md",
+        }
+    ]
+
+    answer = (
+        NarsaGenerationService._build_extractive_fallback(
+            contexts=contexts,
+            question="Comment payer une contravention ?",
+        )
+    )
+
+    assert "30 jours" in answer
+    assert "Je ne dispose pas" not in answer
+    assert "Métadonnées" not in answer
+
+
+def test_markdown_headings_do_not_break_completeness() -> None:
+    answer = (
+        "Pour obtenir un duplicata, suivez les étapes suivantes.\n\n"
+        "### Documents nécessaires :\n"
+        "* Le formulaire de demande dûment rempli et signé.\n"
+        "* Une déclaration de perte établie par la sûreté nationale.\n\n"
+        "### Démarche à suivre :\n"
+        "1. Constituez votre dossier complet.\n"
+        "2. Déposez la demande dans une agence Al Barid Bank."
+    )
+
+    assert (
+        NarsaGenerationService._is_complete_answer(
+            answer,
+            finish_reason="STOP",
+        )
+        is True
+    )
+
+
+def test_truncated_answer_is_still_detected() -> None:
+    truncated = (
+        "Pour obtenir un duplicata, vous devez fournir "
+        "les pièces suivantes :\n"
+        "* Le formulaire de demande dûment rempli.\n"
+        "* Une déclaration de perte établie par la"
+    )
+
+    assert (
+        NarsaGenerationService._is_complete_answer(
+            truncated,
+            finish_reason="STOP",
+        )
+        is False
+    )
+
+
+def test_max_tokens_answer_is_incomplete() -> None:
+    assert (
+        NarsaGenerationService._is_complete_answer(
+            "Une réponse parfaitement terminée ici.",
+            finish_reason="MAX_TOKENS",
+        )
+        is False
+    )

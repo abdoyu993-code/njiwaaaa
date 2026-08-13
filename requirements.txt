@@ -2,6 +2,8 @@
 fastapi
 uvicorn[standard]
 pydantic
+pydantic[email]
+email-validator
 python-multipart
 
 # Configuration
@@ -15,6 +17,9 @@ numpy
 scikit-learn
 sentence-transformers
 joblib
+
+# Génération
+google-genai
 
 # RAG
 chromadb

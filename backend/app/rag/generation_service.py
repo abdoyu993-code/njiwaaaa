@@ -11,6 +11,12 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import errors, types
 
+from backend.app.ai.language import (
+    response_instruction,
+    untranslated_notice,
+)
+from backend.app.core.config import settings
+from backend.app.rag import answer_cache
 from backend.app.rag.rag_service import (
     NarsaRAGService,
     get_rag_service,
@@ -32,6 +38,18 @@ DEFAULT_MAX_RETRIES = 1
 DEFAULT_RETRY_BASE_DELAY = 1.0
 DEFAULT_RETRY_MAX_DELAY = 1.0
 
+# Durée pendant laquelle un modèle dont le quota est épuisé
+# n'est plus sollicité : cela évite de perdre une seconde par
+# question sur un appel voué à l'échec.
+DEFAULT_QUOTA_COOLDOWN_SECONDS = 900.0
+
+# Modèles essayés successivement lorsque le quota du modèle
+# principal est atteint.
+DEFAULT_FALLBACK_MODELS = (
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash",
+)
+
 RETRYABLE_STATUS_CODES = {
     429,
     500,
@@ -43,6 +61,14 @@ RETRYABLE_STATUS_CODES = {
 
 class IncompleteGenerationError(RuntimeError):
     """Gemini a retourné une réponse vide ou tronquée."""
+
+
+class _QuotaExceeded(RuntimeError):
+    """Quota épuisé sur un modèle : il faut en essayer un autre."""
+
+    def __init__(self, original: Exception) -> None:
+        super().__init__(str(original))
+        self.original = original
 
 
 class NarsaGenerationService:
@@ -73,20 +99,30 @@ class NarsaGenerationService:
             DEFAULT_EXTRACTIVE_MAX_CONTENT_CHARS
         ),
     ) -> None:
-        self.api_key = os.getenv("GEMINI_API_KEY")
-
-        if not self.api_key:
-            raise RuntimeError(
-                "GEMINI_API_KEY est absente du fichier .env"
-            )
+        self.api_key = (
+            settings.gemini_api_key
+            or os.getenv("GEMINI_API_KEY")
+            or ""
+        )
 
         self.model_name = (
             model_name
-            or os.getenv(
-                "GEMINI_MODEL",
-                DEFAULT_GEMINI_MODEL,
-            )
+            or settings.gemini_model
+            or DEFAULT_GEMINI_MODEL
         )
+
+        # Chaîne de modèles : principal puis replis, sans doublon.
+        fallbacks = (
+            list(settings.gemini_fallback_models)
+            or list(DEFAULT_FALLBACK_MODELS)
+        )
+        self.gemini_models = list(
+            dict.fromkeys([self.model_name, *fallbacks])
+        )
+        self.quota_cooldown_seconds = (
+            settings.gemini_quota_cooldown_seconds
+        )
+        self._model_blocked_until: dict[str, float] = {}
 
         self.max_contexts = min(
             DEFAULT_MAX_CONTEXTS,
@@ -132,24 +168,46 @@ class NarsaGenerationService:
             or get_rag_service()
         )
 
-        self.client = genai.Client(
-            api_key=self.api_key
+        # Sans clé API, le service reste utilisable :
+        # les réponses sont alors construites uniquement à
+        # partir des extraits documentaires (mode extractif).
+        self.client = (
+            genai.Client(api_key=self.api_key)
+            if self.api_key
+            else None
         )
 
-        print("Service de génération Gemini chargé.")
-        print(f"Modèle utilisé : {self.model_name}")
-        print(
-            "Nombre maximal de nouvelles tentatives : "
-            f"{self.max_retries}"
-        )
+        if self.client is None:
+            print(
+                "GEMINI_API_KEY absente : assistant démarré "
+                "en mode documentaire (sans génération)."
+            )
+        else:
+            print("Service de génération Gemini chargé.")
+            print(f"Modèle utilisé : {self.model_name}")
+            print(
+                "Nombre maximal de nouvelles tentatives : "
+                f"{self.max_retries}"
+            )
+
+    @property
+    def generation_enabled(self) -> bool:
+        """Indique si la génération Gemini est disponible."""
+        return self.client is not None
 
     def answer(
         self,
         question: str,
         top_k: int = DEFAULT_TOP_K,
+        language: str = "fr",
+        search_question: str | None = None,
     ) -> dict[str, Any]:
         """
         Produit une réponse finale à partir des documents.
+
+        `search_question` permet d'interroger le RAG avec une
+        version française de la question lorsque le citoyen écrit
+        en arabe, en darija ou en arabizi.
         """
         total_started_at = perf_counter()
         cleaned_question = question.strip()
@@ -159,8 +217,12 @@ class NarsaGenerationService:
                 "La question doit contenir au moins 2 caractères."
             )
 
+        retrieval_question = (
+            search_question or cleaned_question
+        ).strip()
+
         rag_result = self.rag_service.search(
-            question=cleaned_question,
+            question=retrieval_question,
             top_k=top_k,
         )
 
@@ -185,9 +247,13 @@ class NarsaGenerationService:
             return {
                 **rag_result,
                 "answer": (
-                    "Je n’ai pas trouvé suffisamment "
-                    "d’informations fiables dans les documents "
-                    "disponibles pour répondre à cette question."
+                    rag_result.get("message")
+                    or (
+                        "Je n’ai pas trouvé suffisamment "
+                        "d’informations fiables dans les "
+                        "documents disponibles pour répondre "
+                        "à cette question."
+                    )
                 ),
                 "generated": False,
                 "model": None,
@@ -250,6 +316,42 @@ class NarsaGenerationService:
                     "extractive": True,
                 }
 
+        if not self.generation_available:
+            # Mode documentaire : pas de clé Gemini, ou tous les
+            # modèles sont au repos après un dépassement de quota.
+            # On répond immédiatement à partir des documents au
+            # lieu de perdre une seconde sur un appel voué à
+            # l'échec.
+            reason = (
+                "generation_disabled: GEMINI_API_KEY absente"
+                if getattr(self, "client", None) is None
+                else (
+                    "generation_paused: quota Gemini épuisé, "
+                    "réponse construite à partir des documents"
+                )
+            )
+
+            return {
+                **rag_result,
+                "answer": self._sanitize_answer(
+                    self._build_extractive_fallback(
+                        contexts=contexts,
+                        question=cleaned_question,
+                    )
+                ),
+                "generated": False,
+                "model": None,
+                "finish_reason": None,
+                "generation_attempts": 0,
+                "used_contexts_count": len(contexts),
+                "generation_error": reason,
+                "generation_time_ms": 0.0,
+                "total_time_ms": self._elapsed_ms(
+                    total_started_at
+                ),
+                "extractive": True,
+            }
+
         context_text = self._build_context(
             contexts=contexts
         )
@@ -259,6 +361,7 @@ class NarsaGenerationService:
             domain=rag_result["domain"],
             intent=rag_result["intent"],
             context_text=context_text,
+            language=language,
         )
 
         try:
@@ -352,14 +455,128 @@ class NarsaGenerationService:
             "extractive": False,
         }
 
+    # ------------------------------------------------------------------
+    # Disponibilité des modèles
+    # ------------------------------------------------------------------
+
+    def _candidate_models(self) -> list[str]:
+        """
+        Modèles utilisables maintenant, dans l'ordre de préférence.
+
+        Un modèle dont le quota est épuisé est écarté jusqu'à la
+        fin de sa période de repos.
+        """
+        models = list(
+            getattr(self, "gemini_models", None)
+            or [self.model_name]
+        )
+        blocked = getattr(self, "_model_blocked_until", {})
+        now = time.time()
+
+        available = [
+            model
+            for model in models
+            if blocked.get(model, 0.0) <= now
+        ]
+
+        return available
+
+    @property
+    def generation_available(self) -> bool:
+        """Indique si au moins un modèle Gemini est utilisable."""
+        if getattr(self, "client", None) is None:
+            return False
+
+        return bool(self._candidate_models())
+
+    def _block_model(
+        self,
+        model: str,
+        error: Exception,
+    ) -> None:
+        """Met un modèle au repos après un dépassement de quota."""
+        if not hasattr(self, "_model_blocked_until"):
+            self._model_blocked_until = {}
+
+        cooldown = getattr(
+            self,
+            "quota_cooldown_seconds",
+            DEFAULT_QUOTA_COOLDOWN_SECONDS,
+        )
+        self._model_blocked_until[model] = time.time() + cooldown
+
+        print(
+            f"Quota épuisé pour {model} : mis au repos "
+            f"{cooldown:.0f} s ({type(error).__name__})."
+        )
+
+    @staticmethod
+    def _is_quota_error(
+        error: Exception,
+        status_code: int | None,
+    ) -> bool:
+        """Reconnaît un dépassement de quota (inutile de réessayer)."""
+        if status_code == 429:
+            return True
+
+        message = str(error).upper()
+
+        return (
+            "RESOURCE_EXHAUSTED" in message
+            or "QUOTA" in message
+        )
+
     def _generate_with_retry(
         self,
         prompt: str,
     ) -> tuple[Any, int]:
         """
-        Appelle Gemini une première fois, puis effectue au plus
-        une nouvelle tentative après une courte attente.
+        Appelle Gemini en basculant sur un modèle de repli quand
+        le quota du modèle courant est épuisé, et en réessayant
+        une fois sur erreur temporaire.
         """
+        models = self._candidate_models() or [self.model_name]
+        last_error: Exception | None = None
+        attempts_total = 0
+
+        for model in models:
+            try:
+                response, attempts = self._generate_on_model(
+                    prompt=prompt,
+                    model=model,
+                )
+                attempts_total += attempts
+
+                # Le modèle qui répond devient le modèle courant.
+                self.model_name = model
+
+                return response, attempts_total
+
+            except _QuotaExceeded as quota_error:
+                attempts_total += 1
+                last_error = quota_error.original
+                self._block_model(
+                    model=model,
+                    error=quota_error.original,
+                )
+                continue
+
+            except Exception as error:
+                raise error
+
+        if last_error is not None:
+            raise last_error
+
+        raise RuntimeError(
+            "Échec de génération sans erreur identifiable."
+        )
+
+    def _generate_on_model(
+        self,
+        prompt: str,
+        model: str,
+    ) -> tuple[Any, int]:
+        """Appelle un modèle précis, avec une éventuelle reprise."""
         total_attempts = (
             self.max_retries + 1
         )
@@ -372,13 +589,13 @@ class NarsaGenerationService:
         ):
             try:
                 print(
-                    "Appel Gemini "
+                    f"Appel Gemini ({model}) "
                     f"{attempt}/{total_attempts}..."
                 )
 
                 response = (
                     self.client.models.generate_content(
-                        model=self.model_name,
+                        model=model,
                         contents=(
                             prompt
                             if attempt == 1
@@ -427,6 +644,14 @@ class NarsaGenerationService:
                         error=error
                     )
                 )
+
+                # Un quota épuisé ne se règle pas en réessayant :
+                # on bascule immédiatement sur un autre modèle.
+                if self._is_quota_error(
+                    error=error,
+                    status_code=status_code,
+                ):
+                    raise _QuotaExceeded(error) from error
 
                 retryable = (
                     self._is_retryable_error(
@@ -1298,11 +1523,70 @@ class NarsaGenerationService:
             count=1,
         )
 
+        sanitized = NarsaGenerationService._strip_internal_tokens(
+            sanitized
+        )
+
         return re.sub(
             r"\n{3,}",
             "\n\n",
             sanitized,
         )
+
+    @staticmethod
+    def _strip_internal_tokens(text: str) -> str:
+        """
+        Retire les éléments internes qui n'ont aucun sens pour le
+        citoyen : identifiants d'intention, noms de variables,
+        métadonnées du RAG, fragments de JSON ou d'exception.
+        """
+        if not text:
+            return ""
+
+        cleaned_lines: list[str] = []
+
+        technical_line = re.compile(
+            r"(?i)^\s*(?:"
+            r"(?:intention|intent|domaine|domain|status|statut|"
+            r"score|similarity|confiance|confidence|chunk|"
+            r"metadata|m[ée]tadonn[ée]es?|relative_path|filename|"
+            r"embedding|collection|traceback|exception|error)"
+            r"\s*[:=]"
+            r"|\{.*\}\s*$"
+            r"|\[.*\]\s*$"
+            r")"
+        )
+
+        for line in text.splitlines():
+            if technical_line.match(line.strip()):
+                continue
+
+            cleaned_lines.append(line)
+
+        cleaned = "\n".join(cleaned_lines)
+
+        # Identifiants techniques isolés : « Declaration_accident »,
+        # « procedure_apres_accident », « visite_technique_rdv »…
+        def humanize(match: re.Match[str]) -> str:
+            token = match.group(0)
+            readable = token.replace("_", " ").strip()
+
+            return readable[:1].upper() + readable[1:].lower()
+
+        cleaned = re.sub(
+            r"\b[A-Za-zÀ-ÿ]+(?:_[A-Za-zÀ-ÿ0-9]+)+\b",
+            humanize,
+            cleaned,
+        )
+
+        # Traces de sérialisation résiduelles.
+        cleaned = re.sub(
+            r"(?m)^\s*(?:\"|')?\w+(?:\"|')?\s*:\s*(?:\{|\[).*$",
+            "",
+            cleaned,
+        )
+
+        return re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
     @classmethod
     def _is_complete_answer(
@@ -1355,7 +1639,7 @@ class NarsaGenerationService:
 
         meaningful_lines = [
             re.sub(
-                r"^\s*(?:[-*]|\d+[.)])\s*",
+                r"^\s*(?:#{1,6}\s*|[-*]|\d+[.)])\s*",
                 "",
                 line,
             ).strip()
@@ -1363,16 +1647,26 @@ class NarsaGenerationService:
             if line.strip()
         ]
 
-        for line in meaningful_lines:
-            if line.startswith(("http://", "https://")):
-                continue
+        if not meaningful_lines:
+            return False
 
-            if len(line) < 12:
-                return False
+        # Une réponse tronquée l'est toujours à la fin : seule
+        # la dernière ligne est contrôlée. Les lignes
+        # intermédiaires courtes ou terminées par « : » sont
+        # des intertitres légitimes.
+        last_line = meaningful_lines[-1]
 
-            if not line.endswith((".", "!", "?", ";")):
-                if "http://" not in line and "https://" not in line:
-                    return False
+        if last_line.startswith(("http://", "https://")):
+            return True
+
+        if len(last_line) < 12:
+            return False
+
+        if not last_line.endswith((".", "!", "?", ";")):
+            return (
+                "http://" in last_line
+                or "https://" in last_line
+            )
 
         return True
 
@@ -1462,12 +1756,141 @@ class NarsaGenerationService:
                     break
 
         if not extracted_sections:
+            # Aucune synthèse n'a pu être construite : plutôt
+            # que de renvoyer un refus alors que des extraits
+            # pertinents existent, on cite le meilleur d'entre
+            # eux, raccourci à une longueur lisible.
+            for context in contexts:
+                content = (
+                    NarsaGenerationService
+                    ._content_for_extraction(context)
+                )
+
+                readable = (
+                    NarsaGenerationService
+                    ._clean_document_excerpt(content)
+                )
+
+                if readable:
+                    return (
+                        NarsaGenerationService._shorten(
+                            readable
+                        )
+                    )
+
             return (
                 "Je ne dispose pas d’un extrait documentaire "
-                "suffisamment complet pour répondre sans risque."
+                "suffisamment complet pour répondre sans "
+                "risque à cette question.\n\n"
+                "Je peux vous renseigner sur le permis de "
+                "conduire, le véhicule et la carte grise, la "
+                "visite technique, les infractions et les "
+                "amendes, les accidents et la prévention "
+                "routière.\n\n"
+                "Vous pouvez aussi déposer une réclamation "
+                "depuis la plateforme pour obtenir une "
+                "réponse d’un agent NARSA."
             )
 
         return "\n\n".join(extracted_sections)
+
+    @staticmethod
+    def _clean_document_excerpt(
+        content: str,
+    ) -> str:
+        """
+        Retire l'appareil documentaire d'un extrait Markdown.
+
+        Les titres, la section « Métadonnées » et les champs
+        internes (domaine, intentions, source, langue…) n'ont
+        aucun intérêt pour l'utilisateur final.
+        """
+        metadata_field = re.compile(
+            r"^\s*[-*]\s*(?:domaine|intentions?\s+concern[ée]es?"
+            r"|organisme|source|sources|langue|pays|url"
+            r"|niveau de confiance[^:]*|date[^:]*)\s*:",
+            re.IGNORECASE,
+        )
+
+        kept: list[str] = []
+        in_metadata_section = False
+        in_metadata_list = False
+
+        for line in content.splitlines():
+            stripped = line.strip()
+
+            if stripped.startswith("#"):
+                level = len(stripped) - len(
+                    stripped.lstrip("#")
+                )
+                title = stripped.lstrip("#").strip()
+                normalized_title = title.lower()
+
+                in_metadata_section = (
+                    normalized_title.startswith("metadonnees")
+                    or normalized_title.startswith(
+                        "métadonnées"
+                    )
+                )
+                in_metadata_list = False
+
+                # Le titre du document est redondant ; les
+                # sous-titres sont conservés car ils donnent
+                # leur sens aux listes qui les suivent.
+                if in_metadata_section or level <= 1:
+                    continue
+
+                kept.append("")
+                kept.append(
+                    title
+                    if title.endswith((":", "?", "."))
+                    else f"{title} :"
+                )
+                continue
+
+            if in_metadata_section:
+                continue
+
+            if metadata_field.match(stripped):
+                in_metadata_list = True
+                continue
+
+            # Sous-éléments d'un champ de métadonnées
+            # (« - Intentions concernées : » suivi d'une liste).
+            if (
+                in_metadata_list
+                and line.startswith((" ", "\t"))
+                and stripped.startswith(("-", "*"))
+            ):
+                continue
+
+            in_metadata_list = False
+            kept.append(line)
+
+        cleaned = "\n".join(kept).strip()
+
+        return re.sub(r"\n{3,}", "\n\n", cleaned)
+
+    @staticmethod
+    def _shorten(
+        content: str,
+        max_chars: int = 1200,
+    ) -> str:
+        """Raccourcit un extrait sans couper au milieu d'une phrase."""
+        text = content.strip()
+
+        if len(text) <= max_chars:
+            return text
+
+        truncated = text[:max_chars]
+
+        for separator in ("\n\n", ". ", "\n"):
+            cut = truncated.rfind(separator)
+
+            if cut > max_chars // 2:
+                return truncated[:cut].rstrip(" .;,") + "."
+
+        return truncated.rstrip(" .;,") + "."
 
     @staticmethod
     def _build_prompt(
@@ -1475,18 +1898,23 @@ class NarsaGenerationService:
         domain: str,
         intent: str,
         context_text: str,
+        language: str = "fr",
     ) -> str:
         """
         Construit le prompt RAG envoyé à Gemini.
         """
+        language_rule = response_instruction(language)
+
         return f"""
 Tu es un assistant d'information spécialisé dans les services de la NARSA au Maroc.
 
 Ta réponse doit être strictement fondée sur le contexte documentaire fourni.
 
+Langue de la réponse : {language_rule}
+
 Règles obligatoires :
 
-1. Réponds en français clair, naturel et simple.
+1. Réponds de manière claire, naturelle et simple.
 2. Réponds directement à la question.
 3. N'invente aucune information.
 4. N'utilise pas tes connaissances générales pour compléter le contexte.
@@ -1536,16 +1964,64 @@ def get_generation_service() -> NarsaGenerationService:
 def generate_answer(
     question: str,
     top_k: int = DEFAULT_TOP_K,
+    use_cache: bool = True,
+    language: str = "fr",
+    search_question: str | None = None,
 ) -> dict[str, Any]:
     """
     Fonction utilisée par FastAPI.
+
+    Une question déjà traitée est resservie depuis le cache tant
+    que les documents sources n'ont pas changé.
     """
+    if use_cache:
+        cached = answer_cache.get(
+            question=question,
+            top_k=top_k,
+            language=language,
+        )
+
+        if cached is not None:
+            cached["cached"] = True
+            cached["generation_time_ms"] = 0.0
+            cached["classification_time_ms"] = 0.0
+            cached["retrieval_time_ms"] = 0.0
+
+            return cached
+
     service = get_generation_service()
 
-    return service.answer(
+    result = service.answer(
         question=question,
         top_k=top_k,
+        language=language,
+        search_question=search_question,
     )
+    result["cached"] = False
+
+    # Sans génération, la réponse reste dans la langue des
+    # documents : on l'annonce au citoyen dans sa langue plutôt
+    # que de lui servir du français sans explication.
+    if (
+        language != "fr"
+        and not result.get("generated")
+        and result.get("status") == "context_found"
+    ):
+        notice = untranslated_notice(language)
+        answer_text = result.get("answer") or ""
+
+        if notice and answer_text:
+            result["answer"] = f"{notice}\n\n{answer_text}"
+
+    if use_cache:
+        answer_cache.store(
+            question=question,
+            top_k=top_k,
+            result=result,
+            language=language,
+        )
+
+    return result
 
 
 if __name__ == "__main__":

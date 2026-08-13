@@ -152,6 +152,7 @@ def test_dependent_documents_question_reuses_previous_context(
     def fake_generate_answer(
         question: str,
         top_k: int,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         received["question"] = question
         return _fake_answer(question, "permis", "permis_perte")
@@ -184,6 +185,7 @@ def test_f_independent_question_ignores_previous_context(
     def fake_generate_answer(
         question: str,
         top_k: int,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         received["question"] = question
         return _fake_answer(

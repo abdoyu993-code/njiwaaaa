@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import Any
 
 import chromadb
-from sentence_transformers import SentenceTransformer
+
+from backend.app.core.embeddings import (
+    encode_query,
+    get_embedding_model,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -116,7 +120,8 @@ class NarsaRetriever:
             "du retriever..."
         )
 
-        self.embedding_model = SentenceTransformer(
+        # Instance partagée avec le classifieur d'intentions.
+        self.embedding_model = get_embedding_model(
             EMBEDDING_MODEL_NAME
         )
 
@@ -344,9 +349,10 @@ class NarsaRetriever:
             intent=intent,
         )
 
-        query_embedding = self.embedding_model.encode(
-            enhanced_query,
-            normalize_embeddings=True,
+        query_embedding = encode_query(
+            model_name=EMBEDDING_MODEL_NAME,
+            text=enhanced_query,
+            model=self.embedding_model,
         ).tolist()
 
         normalized_original_query = self.normalize_for_matching(

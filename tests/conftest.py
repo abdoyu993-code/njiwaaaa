@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -11,3 +13,19 @@ if str(PROJECT_ROOT) not in sys.path:
         0,
         str(PROJECT_ROOT),
     )
+
+
+# Les tests ne doivent jamais écrire dans la base locale
+# de développement : une base temporaire est utilisée.
+_TEST_DB_DIR = tempfile.mkdtemp(prefix="narsa-tests-")
+
+os.environ.setdefault(
+    "DATABASE_URL",
+    f"sqlite:///{Path(_TEST_DB_DIR) / 'narsa-test.db'}",
+)
+os.environ.setdefault("ADMIN_USERNAME", "agent")
+os.environ.setdefault("ADMIN_PASSWORD", "narsa2026")
+os.environ.setdefault(
+    "ADMIN_SECRET",
+    "secret-de-test",
+)

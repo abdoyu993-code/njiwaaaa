@@ -6,7 +6,11 @@ from typing import Any
 
 import joblib
 import numpy as np
-from sentence_transformers import SentenceTransformer
+
+from backend.app.core.embeddings import (
+    encode_query,
+    get_embedding_model,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -44,8 +48,9 @@ class IntentClassifierService:
             encoding="utf-8",
         ).strip()
 
-        print("Chargement du modèle Sentence-BERT...")
-        self.embedding_model = SentenceTransformer(
+        # Modèle partagé avec le retriever RAG : il n'est chargé
+        # qu'une seule fois pour l'ensemble de l'application.
+        self.embedding_model = get_embedding_model(
             self.model_name
         )
 
@@ -111,11 +116,13 @@ class IntentClassifierService:
         """Prédit l'intention, le domaine et la confiance."""
         normalized_text = self.normalize_text(text)
 
-        embedding = self.embedding_model.encode(
-            [normalized_text],
-            convert_to_numpy=True,
-            normalize_embeddings=True,
-        )
+        # Encodage mis en cache : une question déjà classée ne
+        # repasse pas par le modèle.
+        embedding = encode_query(
+            model_name=self.model_name,
+            text=normalized_text,
+            model=self.embedding_model,
+        ).reshape(1, -1)
 
         probabilities = self.classifier.predict_proba(
             embedding

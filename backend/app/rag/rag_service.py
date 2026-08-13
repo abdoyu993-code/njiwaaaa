@@ -13,6 +13,11 @@ DEFAULT_CLARIFICATION_THRESHOLD = 0.60
 DEFAULT_MINIMUM_SIMILARITY_SCORE = 0.30
 DEFAULT_TOP_K = 3
 
+# Seuil appliqué au rattrapage des questions dont la
+# classification est incertaine : seule une correspondance
+# documentaire forte permet de répondre.
+RESCUE_MINIMUM_SIMILARITY_SCORE = 0.55
+
 CARTE_GRISE_CASE_MARKERS = (
     "premiere immatriculation",
     "vehicule neuf",
@@ -124,6 +129,73 @@ INTENT_QUERY_HINTS: dict[str, str] = {
 }
 
 
+NARSA_CONTACT_HINT = (
+    "Vous pouvez aussi contacter la NARSA ou déposer une "
+    "réclamation depuis la plateforme pour obtenir une "
+    "réponse d’un agent."
+)
+
+# Sujets réellement couverts par le corpus documentaire.
+# Ils servent à orienter l'utilisateur quand la recherche
+# ne trouve pas d'extrait fiable.
+DOMAIN_COVERAGE: dict[str, tuple[str, ...]] = {
+    "permis": (
+        "duplicata après perte ou vol du permis",
+        "échange ou renouvellement du permis",
+        "plateforme e-Rokhsati",
+    ),
+    "vehicule": (
+        "immatriculation d’un véhicule neuf ou importé",
+        "mutation et changement de propriétaire",
+        "carte grise et formulaires associés",
+    ),
+    "visite_technique": (
+        "prise de rendez-vous pour le contrôle technique",
+        "procès-verbal de contrôle technique exigé "
+        "lors d’une mutation",
+    ),
+    "infractions": (
+        "paiement d’une amende",
+        "réclamation sur un avis de contravention",
+        "constatation et traitement des infractions",
+    ),
+    "accident": (
+        "conduite à tenir en cas d’accident ou de panne",
+        "prise en charge d’un blessé",
+        "équipements de sécurité obligatoires",
+    ),
+    "prevention": (
+        "ceinture de sécurité et port du casque",
+        "téléphone au volant, fatigue et somnolence",
+        "conseils aux conducteurs débutants",
+    ),
+    "contact_reclamation": (
+        "coordonnées et formulaire de contact NARSA",
+        "portail Chikaya de réclamation",
+        "suivi d’un dossier",
+    ),
+}
+
+
+def format_coverage(domain: str) -> str:
+    """Liste lisible des sujets couverts pour un domaine."""
+    subjects = DOMAIN_COVERAGE.get(domain)
+
+    if not subjects:
+        return ""
+
+    lines = "\n".join(
+        f"- {subject} ;" for subject in subjects[:-1]
+    )
+
+    if lines:
+        lines += f"\n- {subjects[-1]}."
+    else:
+        lines = f"- {subjects[-1]}."
+
+    return lines
+
+
 class NarsaRAGService:
     """
     Service combinant la classification et la recherche documentaire.
@@ -174,6 +246,29 @@ class NarsaRAGService:
         )
 
         if needs_clarification:
+            # Le classifieur peut sous-estimer une question
+            # pourtant claire. On tente une recherche
+            # documentaire directe avant de demander une
+            # reformulation, avec une exigence de score élevée.
+            retrieval_started_at = perf_counter()
+            rescued = self._rescue_low_confidence_question(
+                question=question,
+                classification=classification,
+                top_k=top_k,
+            )
+            retrieval_time_ms = self._elapsed_ms(
+                retrieval_started_at
+            )
+
+            if rescued is not None:
+                return {
+                    **rescued,
+                    "classification_time_ms": (
+                        classification_time_ms
+                    ),
+                    "retrieval_time_ms": retrieval_time_ms,
+                }
+
             result = self._build_clarification_response(
                 question=question,
                 classification=classification,
@@ -184,7 +279,7 @@ class NarsaRAGService:
                 "classification_time_ms": (
                     classification_time_ms
                 ),
-                "retrieval_time_ms": 0.0,
+                "retrieval_time_ms": retrieval_time_ms,
             }
 
         needs_case_selection = (
@@ -372,8 +467,18 @@ class NarsaRAGService:
             "needs_clarification": True,
             "message": (
                 "Je ne suis pas suffisamment sûr de votre "
-                "demande. Pouvez-vous la reformuler avec "
-                "plus de détails ?"
+                "demande. Pouvez-vous la reformuler en "
+                "précisant votre démarche ?\n\n"
+                "Je peux notamment vous renseigner sur :\n\n"
+                "- le permis de conduire (perte, vol, "
+                "duplicata, renouvellement) ;\n"
+                "- le véhicule et la carte grise "
+                "(immatriculation, mutation) ;\n"
+                "- la visite technique ;\n"
+                "- les infractions et le paiement des "
+                "amendes ;\n"
+                "- les accidents et la prévention routière.\n\n"
+                f"{NARSA_CONTACT_HINT}"
             ),
             "classification": classification,
             "contexts": [],
@@ -395,9 +500,8 @@ class NarsaRAGService:
             "intent": classification["intent"],
             "confidence": classification["confidence"],
             "needs_clarification": False,
-            "message": (
-                "La demande a été comprise, mais aucun "
-                "document suffisamment pertinent n’a été trouvé."
+            "message": self._build_no_context_message(
+                classification["domain"]
             ),
             "classification": classification,
             "contexts": [],
@@ -406,6 +510,96 @@ class NarsaRAGService:
                 retrieved_chunks
             ),
         }
+
+    def _rescue_low_confidence_question(
+        self,
+        question: str,
+        classification: dict[str, Any],
+        top_k: int,
+    ) -> dict[str, Any] | None:
+        """
+        Répond malgré une confiance faible lorsque la recherche
+        documentaire trouve un extrait très pertinent.
+
+        Le seuil est volontairement plus élevé que le seuil
+        habituel : sans intention fiable, seule une
+        correspondance forte autorise une réponse.
+        """
+        try:
+            chunks = self.retriever.search(
+                query=question,
+                domain=None,
+                intent=None,
+                top_k=top_k,
+                original_query=question,
+            )
+
+        except Exception as error:  # pragma: no cover
+            print(
+                "Recherche de secours impossible :",
+                f"{type(error).__name__}: {error}",
+            )
+            return None
+
+        relevant_chunks = [
+            chunk
+            for chunk in chunks
+            if float(chunk.get("similarity_score", 0.0))
+            >= RESCUE_MINIMUM_SIMILARITY_SCORE
+        ]
+
+        if not relevant_chunks:
+            return None
+
+        best_chunk = relevant_chunks[0]
+        domain = (
+            best_chunk.get("domain")
+            or classification["domain"]
+        )
+
+        return {
+            "question": question,
+            "retrieval_query": question,
+            "status": "context_found",
+            "domain": domain,
+            "intent": classification["intent"],
+            "confidence": classification["confidence"],
+            "needs_clarification": False,
+            "low_confidence_rescue": True,
+            "message": (
+                f"{len(relevant_chunks)} extrait(s) très "
+                "pertinent(s) ont été trouvés malgré une "
+                "intention incertaine."
+            ),
+            "classification": classification,
+            "contexts": relevant_chunks,
+            "sources": self._build_sources(
+                chunks=relevant_chunks
+            ),
+        }
+
+    @staticmethod
+    def _build_no_context_message(
+        domain: str,
+    ) -> str:
+        """Explique l'absence de réponse et oriente l'utilisateur."""
+        coverage = format_coverage(domain)
+
+        message = (
+            "Votre demande a bien été comprise, mais les "
+            "documents officiels dont je dispose ne "
+            "couvrent pas ce cas précis. Je préfère ne "
+            "rien affirmer plutôt que de vous donner une "
+            "information inexacte."
+        )
+
+        if coverage:
+            message += (
+                "\n\nSur ce sujet, je peux vous renseigner "
+                f"sur :\n\n{coverage}"
+            )
+
+        return f"{message}\n\n{NARSA_CONTACT_HINT}"
 
     @staticmethod
     def _build_sources(
