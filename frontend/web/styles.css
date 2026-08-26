@@ -871,6 +871,24 @@ a:hover { color: var(--primary-dark); }
 .official-response__meta { font-size: .78rem; color: var(--text-muted); margin: 8px 0 0 !important; }
 .official-response--compact { padding: 12px 14px; font-size: .88rem; }
 
+/* Suivi citoyen : aucune réponse officielle pour l'instant. */
+.response-pending {
+  background: var(--surface-2, #f6f8fb);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  margin: 12px 0;
+}
+.response-pending h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: .95rem;
+  color: var(--text-secondary);
+}
+.response-pending p { margin: 0; font-size: .9rem; color: var(--text-muted); }
+
 .related { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .related__label { width: 100%; font-size: .76rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; }
 .related .chip { font-size: .82rem; padding: 6px 12px; }
@@ -1194,7 +1212,7 @@ body {
 
 .service-header__narsa img {
   display: block;
-  width: 230px;
+  width: clamp(130px, 13vw, 169px);
   height: auto;
 }
 
@@ -2221,7 +2239,7 @@ body[data-route="admin"] .site-footer__bottom-inner {
   }
 
   .service-header__narsa img {
-    width: 195px;
+    width: 142px;
   }
 
   .service-header__institutions {
@@ -2334,7 +2352,7 @@ body[data-route="admin"] .site-footer__bottom-inner {
 
  (max-width: 680px) {
   .service-header__narsa img {
-    width: 160px;
+    width: 120px;
   }
 
   .service-header__login {

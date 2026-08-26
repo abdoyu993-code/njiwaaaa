@@ -23,6 +23,18 @@ os.environ.setdefault(
     "DATABASE_URL",
     f"sqlite:///{Path(_TEST_DB_DIR) / 'narsa-test.db'}",
 )
+# Les tests ne doivent JAMAIS utiliser le vrai serveur SMTP du
+# poste : sans cela, un `.env` correctement configuré ferait
+# partir de vrais emails à chaque exécution de la suite.
+#
+# `load_dotenv()` n'écrase pas les variables déjà présentes dans
+# l'environnement : les fixer ici neutralise le `.env` local.
+# Les tests qui vérifient la mécanique SMTP la simulent
+# explicitement (voir `tests/test_response_notification.py`).
+os.environ["SMTP_HOST"] = ""
+os.environ["SMTP_USERNAME"] = ""
+os.environ["SMTP_PASSWORD"] = ""
+
 os.environ.setdefault("ADMIN_USERNAME", "agent")
 os.environ.setdefault("ADMIN_PASSWORD", "narsa2026")
 os.environ.setdefault(

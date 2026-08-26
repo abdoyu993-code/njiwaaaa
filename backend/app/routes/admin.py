@@ -30,12 +30,16 @@ from backend.app.database.session import get_session
 from backend.app.notifications.email import (
     notify_response_added,
     notify_status_changed,
+    send_test_email,
+    sent_messages,
+    smtp_configuration,
 )
 from backend.app.schemas.admin import (
     AdminLoginRequest,
     AdminLoginResponse,
     AdminProfileResponse,
     DashboardResponse,
+    EmailTestRequest,
 )
 from backend.app.schemas.complaints import (
     ComplaintListResponse,
@@ -79,6 +83,25 @@ def csv_response(
             )
         },
     )
+
+
+def notification_status(
+    result: dict | None,
+) -> dict[str, str | None] | None:
+    """
+    Réduit le résultat d'un envoi email à ce que l'agent doit
+    voir. Ne laisse passer ni le corps du message ni aucun
+    élément de configuration sensible.
+    """
+    if not result:
+        return None
+
+    return {
+        "status": result.get("status", "inconnu"),
+        "to": result.get("to", ""),
+        "detail": result.get("detail"),
+        "error": result.get("error"),
+    }
 
 
 @router.post(
@@ -383,7 +406,7 @@ def change_complaint_status(
 
     # L'email n'est qu'une notification : son échec ne doit
     # jamais remettre en cause l'enregistrement du statut.
-    notify_status_changed(
+    notification = notify_status_changed(
         to=updated.email,
         reference=updated.reference,
         full_name=updated.full_name,
@@ -396,7 +419,8 @@ def change_complaint_status(
     )
 
     return ComplaintResponse(
-        **serialize_complaint(refreshed or updated)
+        **serialize_complaint(refreshed or updated),
+        notification=notification_status(notification),
     )
 
 
@@ -443,9 +467,11 @@ def answer_complaint(
             detail=str(error),
         ) from error
 
-    # La réponse est déjà enregistrée : un échec d'envoi
-    # d'email ne fait perdre aucune donnée métier.
-    notify_response_added(
+    # La réponse est déjà enregistrée et committée : un échec
+    # d'envoi d'email ne fait perdre aucune donnée métier.
+    # Son résultat est remonté à l'agent pour qu'un vrai
+    # problème SMTP soit visible immédiatement.
+    notification = notify_response_added(
         to=updated.email,
         reference=updated.reference,
         full_name=updated.full_name,
@@ -457,5 +483,50 @@ def answer_complaint(
     )
 
     return ComplaintResponse(
-        **serialize_complaint(refreshed or updated)
+        **serialize_complaint(refreshed or updated),
+        notification=notification_status(notification),
     )
+
+
+# ----------------------------------------------------------------------
+# Diagnostic des notifications email
+# ----------------------------------------------------------------------
+
+
+@router.get("/email/status")
+def email_status(
+    _: str = Depends(require_admin),
+) -> dict:
+    """
+    Configuration SMTP effective et dernières tentatives.
+
+    Le mot de passe n'est jamais exposé : seule l'information
+    « un mot de passe est configuré » remonte.
+    """
+    return {
+        "configuration": smtp_configuration(),
+        "recent": [
+            {
+                "status": message.get("status"),
+                "to": message.get("to"),
+                "subject": message.get("subject"),
+                "detail": message.get("detail"),
+                "error": message.get("error"),
+            }
+            for message in sent_messages()[-10:]
+        ],
+    }
+
+
+@router.post("/email/test")
+def email_test(
+    payload: EmailTestRequest,
+    _: str = Depends(require_admin),
+) -> dict:
+    """Envoie un email de test pour valider la chaîne SMTP."""
+    result = send_test_email(to=str(payload.to))
+
+    return {
+        "notification": notification_status(result),
+        "configuration": smtp_configuration(),
+    }

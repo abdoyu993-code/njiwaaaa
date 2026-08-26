@@ -93,6 +93,8 @@ Identifiants d'administration par défaut : `agent` / `narsa2026`
 | GET | `/admin/complaints/export` | Export CSV des réclamations. |
 | PATCH | `/admin/complaints/{ref}` | Changement de statut + note. |
 | POST | `/admin/complaints/{ref}/response` | Réponse officielle de l'agent (enregistrée + email). |
+| GET | `/admin/email/status` | Configuration SMTP effective + dernières tentatives (sans secret). |
+| POST | `/admin/email/test` | Envoi d'un email de contrôle pour valider la chaîne SMTP. |
 | GET | `/admin/conversations` | Historique des échanges. |
 | GET | `/admin/conversations/export` | Export CSV de l'historique. |
 | GET | `/health`, `/api` | État de l'API. |
@@ -115,9 +117,61 @@ Identifiants d'administration par défaut : `agent` / `narsa2026`
 | `GEMINI_QUOTA_COOLDOWN_SECONDS` | `900` | Durée de mise au repos d'un modèle après un 429. |
 | `ANSWER_CACHE_ENABLED` | `true` | Cache des réponses documentaires. |
 | `EMAIL_ENABLED` | `true` | Notifications email (console si `SMTP_HOST` est vide). |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` | *(vide)* | Serveur d'envoi des notifications. |
+| `SMTP_HOST` / `SMTP_PORT` | *(vide)* / `587` | Serveur d'envoi des notifications. |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | *(vide)* | Compte SMTP. Le mot de passe ne vit que dans `.env`, jamais dans `.env.example` ni dans le code. |
+| `SMTP_USE_TLS` / `SMTP_USE_SSL` | `true` / `false` | STARTTLS (port 587) ou SSL direct (port 465). |
+| `SMTP_TIMEOUT` | `10` | Délai maximum d'une tentative SMTP, en secondes. |
 | `EMAIL_SENDER` | `no-reply@narsa.gov.ma` | Expéditeur des emails. |
 | `PORTAL_URL` | `http://127.0.0.1:8000` | URL du portail insérée dans les emails. |
+
+### Notifications email
+
+Le mail n'est qu'une **notification** : la réponse officielle complète reste
+consultable sur le portail de suivi (`/#/suivi`), jamais dans l'email.
+
+Une panne SMTP ne fait perdre aucune donnée : la réponse de l'agent est
+enregistrée et committée **avant** toute tentative d'envoi. L'échec éventuel
+est journalisé (`narsa.email`) avec un diagnostic, et remonté à l'agent dans
+l'espace d'administration — le mot de passe n'apparaît jamais, ni dans les
+journaux ni dans les réponses de l'API.
+
+Exemple Gmail / Google Workspace dans `.env` :
+
+```env
+EMAIL_ENABLED=true
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=votre.compte@gmail.com
+SMTP_PASSWORD=xxxxxxxxxxxxxxxx   # mot de passe d'application, 16 caractères
+SMTP_USE_TLS=true
+SMTP_USE_SSL=false
+EMAIL_SENDER=votre.compte@gmail.com
+PORTAL_URL=http://127.0.0.1:8000
+```
+
+Le mot de passe d'application se crée sur
+<https://myaccount.google.com/apppasswords>, après activation de la validation
+en 2 étapes. Le mot de passe principal du compte Google est systématiquement
+refusé par `smtp.gmail.com`.
+
+Pour vérifier la configuration sans toucher à un dossier réel :
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8000/admin/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"agent","password":"narsa2026"}' \
+  | python -c "import sys,json;print(json.load(sys.stdin)['access_token'])")
+
+curl -s http://127.0.0.1:8000/admin/email/status -H "Authorization: Bearer $TOKEN"
+
+curl -s -X POST http://127.0.0.1:8000/admin/email/test \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"to":"destinataire@exemple.ma"}'
+```
+
+Un envoi n'est réussi que si le statut retourné est `sent`. Les statuts
+`console` (aucun `SMTP_HOST`), `disabled` (`EMAIL_ENABLED=false`) et `failed`
+signifient qu'**aucun email n'est parti**.
 
 ## Tests
 

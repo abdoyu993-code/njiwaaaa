@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 from contextlib import asynccontextmanager
 
@@ -38,6 +39,28 @@ from backend.app.routes.journeys import (
 )
 
 
+def _configure_logging() -> None:
+    """
+    Rend les journaux applicatifs visibles sous uvicorn.
+
+    Uvicorn ne configure que ses propres loggers : sans cela, les
+    traces de diagnostic (notamment SMTP) resteraient invisibles.
+    """
+    logger = logging.getLogger("narsa")
+
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter(
+                "%(levelname)s [%(name)s] %(message)s"
+            )
+        )
+        logger.addHandler(handler)
+
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+
 def _preload_models() -> None:
     """Charge les modèles en tâche de fond au démarrage."""
     try:
@@ -57,6 +80,7 @@ def _preload_models() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _configure_logging()
     init_database()
 
     if settings.preload_models:

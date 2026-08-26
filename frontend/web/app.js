@@ -877,11 +877,17 @@
 
         html +=
           '<div class="msg__footer">' +
-          '<span class="confidence confidence--' +
-          verdict.level +
-          '">' +
-          verdict.label +
-          "</span>" +
+          // Le niveau « faible » n'est pas affiché au citoyen :
+          // un avertissement rouge sous une réponse utile est
+          // anxiogène et dévalorise l'assistant. Le niveau reste
+          // calculé et disponible dans « Détails techniques ».
+          (verdict.level === "faible"
+            ? ""
+            : '<span class="confidence confidence--' +
+              verdict.level +
+              '">' +
+              verdict.label +
+              "</span>") +
           sources
             .map(
               (source, index) =>
@@ -1461,7 +1467,15 @@
             ? '<p class="alert alert--ok"><strong>Note de la NARSA :</strong> ' +
               escapeHtml(data.admin_note) +
               "</p>"
-            : "") +
+            // Aucune réponse encore rédigée : on l'annonce
+            // explicitement plutôt que de laisser un vide.
+            : '<div class="response-pending">' +
+              '<h4><svg class="ico"><use href="#i-spinner"/></svg>' +
+              "Réponse officielle en attente</h4>" +
+              "<p>Aucune réponse officielle n'a encore été rédigée " +
+              "pour ce dossier. Vous serez prévenu par e-mail dès " +
+              "qu'un agent y aura répondu, et la réponse complète " +
+              "s'affichera ici.</p></div>") +
         "</div>" +
         '<div class="timeline-block">' +
         "<h4>Parcours de votre réclamation</h4>" +
@@ -1935,6 +1949,10 @@
 
   const Admin = {
     tab: "dashboard",
+    // Verrou anti double-clic sur l'envoi d'une réponse.
+    sendingResponse: false,
+    // Confirmation à réafficher après le rechargement du dossier.
+    pendingFeedback: null,
 
     token() {
       return sessionStorage.getItem("narsa-admin-token");
@@ -2467,6 +2485,54 @@
       }
     },
 
+    responseFeedback(saved) {
+      // La réponse est déjà en base quand on arrive ici : le
+      // message distingue toujours l'enregistrement (réussi)
+      // de la notification email (qui peut, elle, échouer).
+      const notification = (saved && saved.notification) || null;
+      const base = "Réponse enregistrée et visible dans le suivi citoyen.";
+
+      if (!notification) {
+        return { message: base, ok: true };
+      }
+
+      if (notification.status === "sent") {
+        return {
+          message:
+            base + " Email de notification envoyé à " + notification.to + ".",
+          ok: true,
+        };
+      }
+
+      if (notification.status === "console") {
+        return {
+          message:
+            base +
+            " Aucun serveur SMTP configuré : l'email a été écrit " +
+            "dans la console du serveur (SMTP_HOST manquant).",
+          ok: false,
+        };
+      }
+
+      if (notification.status === "disabled") {
+        return {
+          message:
+            base +
+            " Notifications email désactivées (EMAIL_ENABLED=false).",
+          ok: false,
+        };
+      }
+
+      return {
+        message:
+          base +
+          " En revanche l'email n'a PAS pu être envoyé : " +
+          (notification.detail || notification.error || "erreur SMTP") +
+          " Consultez le journal du serveur pour le détail.",
+        ok: false,
+      };
+    },
+
     async openComplaint(reference) {
       const panel = $("#complaint-detail");
 
@@ -2574,15 +2640,28 @@
               "</p></div>"
             : "") +
           '<form class="form" id="response-form">' +
-          "<label>Rédiger la réponse envoyée au citoyen" +
-          '<textarea name="response" rows="5" placeholder="Bonjour, après vérification de votre dossier..."></textarea></label>' +
+          "<label>" +
+          (data.official_response
+            ? "Modifier la réponse envoyée au citoyen"
+            : "Rédiger la réponse envoyée au citoyen") +
+          '<textarea name="response" rows="7" placeholder="Bonjour, après vérification de votre dossier...">' +
+          // La réponse déjà enregistrée est rechargée dans le
+          // champ : l'agent la relit et la corrige au lieu de
+          // la ressaisir.
+          escapeHtml(data.official_response || "") +
+          "</textarea></label>" +
           "<label>Statut après envoi" +
           '<select name="status">' +
           '<option value="traitee">Traitée</option>' +
           '<option value="rejetee">Rejetée</option>' +
           '<option value="en_cours">En cours de traitement</option>' +
           "</select></label>" +
-          '<button class="btn btn--primary btn--block" type="submit">Valider et envoyer la réponse</button>' +
+          '<button class="btn btn--primary btn--block" type="submit" id="response-submit">' +
+          (data.official_response
+            ? "Mettre à jour la réponse"
+            : "Envoyer la réponse au citoyen") +
+          "</button>" +
+          '<p class="alert" id="response-feedback" hidden></p>' +
           '<p class="muted">La réponse est conservée dans la plateforme ; un email prévient le citoyen.</p>' +
           "</form></section>" +
 
@@ -2599,22 +2678,50 @@
         const responseForm = $("#response-form", panel);
 
         if (responseForm) {
+          const submitButton = $("#response-submit", responseForm);
+          const feedback = $("#response-feedback", responseForm);
+          const initialLabel = submitButton.textContent;
+
+          // Le statut proposé après envoi part du statut réel
+          // du dossier quand il est déjà tranché.
+          if (
+            ["traitee", "rejetee", "en_cours"].includes(data.status)
+          ) {
+            responseForm.status.value = data.status;
+          }
+
+          const showFeedback = (message, ok) => {
+            feedback.textContent = message;
+            feedback.classList.toggle("alert--ok", Boolean(ok));
+            feedback.hidden = false;
+          };
+
           responseForm.addEventListener(
             "submit",
             async (event) => {
               event.preventDefault();
 
+              // Garde anti double-clic : une soumission déjà
+              // en cours ne peut pas être relancée.
+              if (this.sendingResponse) return;
+
               const text = responseForm.response.value.trim();
 
               if (text.length < 10) {
-                window.alert(
-                  "La réponse doit contenir au moins 10 caractères."
+                showFeedback(
+                  "La réponse doit contenir au moins 10 caractères.",
+                  false
                 );
                 return;
               }
 
+              this.sendingResponse = true;
+              submitButton.disabled = true;
+              submitButton.textContent = "Envoi en cours...";
+              feedback.hidden = true;
+
               try {
-                await apiRequest(
+                const saved = await apiRequest(
                   "/admin/complaints/" +
                     encodeURIComponent(data.reference) +
                     "/response",
@@ -2628,15 +2735,37 @@
                   }
                 );
 
+                // La réponse est enregistrée : le résultat de
+                // la notification email est signalé à part pour
+                // qu'un problème SMTP reste diagnosticable.
+                this.pendingFeedback = this.responseFeedback(saved);
+
                 await this.loadComplaints();
                 await this.openComplaint(data.reference);
               } catch (error) {
                 if (!this.handleAuthError(error)) {
-                  window.alert(error.message);
+                  showFeedback(
+                    "Échec de l'enregistrement : " + error.message,
+                    false
+                  );
                 }
+              } finally {
+                this.sendingResponse = false;
+                submitButton.disabled = false;
+                submitButton.textContent = initialLabel;
               }
             }
           );
+
+          // Confirmation affichée après le rechargement du
+          // dossier, pour qu'elle survive au re-rendu du panneau.
+          if (this.pendingFeedback) {
+            showFeedback(
+              this.pendingFeedback.message,
+              this.pendingFeedback.ok
+            );
+            this.pendingFeedback = null;
+          }
         }
 
         const statusForm = $("#status-form", panel);

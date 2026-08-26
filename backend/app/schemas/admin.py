@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class AdminLoginRequest(BaseModel):
@@ -47,3 +47,9 @@ class DashboardResponse(BaseModel):
             "l'assistant."
         ),
     )
+
+
+class EmailTestRequest(BaseModel):
+    """Destinataire d'un email de vérification SMTP."""
+
+    to: EmailStr

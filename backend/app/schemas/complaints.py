@@ -92,6 +92,20 @@ class ComplaintEventResponse(BaseModel):
     created_at: datetime
 
 
+class EmailNotificationStatus(BaseModel):
+    """
+    Résultat de la notification email liée à une action agent.
+
+    Purement informatif : la donnée métier est déjà enregistrée
+    quand ce statut est produit. Ne contient aucun secret.
+    """
+
+    status: str
+    to: str
+    detail: str | None = None
+    error: str | None = None
+
+
 class ComplaintResponse(BaseModel):
     reference: str
     full_name: str
@@ -116,6 +130,9 @@ class ComplaintResponse(BaseModel):
     events: list[ComplaintEventResponse] = Field(
         default_factory=list
     )
+    # Renseigné uniquement sur les routes agent : le suivi
+    # citoyen n'expose jamais l'état de la notification.
+    notification: EmailNotificationStatus | None = None
 
 
 class ComplaintCreatedResponse(BaseModel):
