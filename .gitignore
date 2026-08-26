@@ -1,4 +1,6 @@
-.env
+# Dépôt privé : le fichier .env est versionné pour qu'un clone
+# fonctionne sans configuration, envoi d'emails compris.
+# À réexclure impérativement si le dépôt repasse en public.
 backend/data/*.db
 __pycache__/
 *.pyc
